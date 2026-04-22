@@ -6,8 +6,13 @@ from datetime import date
 from typing import Optional
 from pathlib import Path
 from glob import glob
+from os import environ
 
-DATAROOT = "/Users/jwl/data/themis"
+if Path("/disks/themisdata").is_dir():
+    DATAROOT = "/disks/themisdata"
+else:
+    DATAROOT = environ["HOME"]+"/data/themis"
+
 PROBES = ["tha", "thb", "thc", "thd", "the"]
 
 L1_TYPES = [

@@ -1,0 +1,4 @@
+[paths]
+input_dataroot = "/disks/themisdata"
+output_dataroot = "/disks/themisdata"
+temproot = "/mydisks/home/thmsoc/thmsoc_python"

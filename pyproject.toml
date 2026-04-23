@@ -11,7 +11,8 @@ dependencies = [
     "pandas",
     "numpy",
     "scipy",
-    "pyspedas"
+    "pyspedas",
+    "tomli"
 ]
 
 [project.scripts]

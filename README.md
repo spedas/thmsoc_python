@@ -22,8 +22,8 @@ For example, if you're testing on your laptop, you probably don't have /disks/th
 but you probably have a SPEDAS data directory...use the 'themis' subdirectory as 'input_dataroot'.
 
 If you're developing on one of the lab machines, you can read from /disks/themisdata, but 
-won't be able to write to it.  If you're testing a script that would normally create output files
-under /disks/themisdata, set 'output_dataroot' to someplace where you have write permission.
+won't be able to write to it unless you're logged in as 'thmsoc' (not recommended for testing!).  
+If you're testing a script that would normally create output files under /disks/themisdata, set 'output_dataroot' to someplace where you have write permission.
 
 A complete bootstrap process for installing thmsoc_python for personal use would look like this:
 
@@ -48,7 +48,7 @@ After testing any local changes you want to make, push them out to the Github re
 Then log into the 'thmsw' account on a RHEL machine (not ambrosia, unti it gets updated).
 Activate the thmsoc_python venv:
 
-`source /disks/socware/thmsoc_dp_current/thmsoc_python/.venv/activate.csh`
+`source /disks/socware/thmsoc_dp_current/thmsoc_python/.venv/bin/activate.csh`
 
 cd into the thmsoc_python directory and do 'git pull'.
 

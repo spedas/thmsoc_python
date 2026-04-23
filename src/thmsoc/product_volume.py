@@ -1,96 +1,116 @@
 from __future__ import annotations
-#from datetime import datetime
 import pandas as pd
-from dataclasses import dataclass, asdict
-from datetime import date
+from dataclasses import dataclass, asdict, replace
 from typing import Optional
 from pathlib import Path
 from glob import glob
-from os import environ
+import tomli
+from datetime import datetime, date
+from thmsoc.daterange import daterange
 
-if Path("/disks/themisdata").is_dir():
-    DATAROOT = "/disks/themisdata"
-else:
-    DATAROOT = environ["HOME"]+"/data/themis"
 
-PROBES = ["tha", "thb", "thc", "thd", "the"]
+def get_categories() -> dict:
+    thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
+    thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
 
-L1_TYPES = [
-    "bau", "eff", "efp", "efw", "esa", "fbk",
-    "fff_16", "fff_32", "fff_64",
-    "ffp_16", "ffp_32", "ffp_64",
-    "ffw_16", "ffw_32", "ffw_64",
-    "fgm", "fit", "hsk", "mom",
-    "scmode", "scf", "scp", "scw", "sst", "state",
-    "trg", "vaf", "vap", "vaw", "vbf", "vbp", "vbw",
-]
+    try:
+        with open(thmsoc_python_config, "rb") as f:
+            toml_dict = tomli.load(f)
+            DATAROOT = toml_dict["paths"]["input_dataroot"]
 
-L1_TYPES_TO_INST = {
-    "bau": "BAU",
-    "eff": "EFI",
-    "efp": "EFI",
-    "efw": "EFI",
-    "vaf": "EFI",
-    "vap": "EFI",
-    "vaw": "EFI",
-    "vbf": "EFI",
-    "vbp": "EFI",
-    "vbw": "EFI",
-    "fbk": "EFI+SCM",
-    "fgm": "FGM",
-    "fit": "FGM+EFI",
-    "fff_16": "EFI+SCM",
-    "fff_32": "EFI+SCM",
-    "fff_64": "EFI+SCM",
-    "ffp_16": "EFI+SCM",
-    "ffp_32": "EFI+SCM",
-    "ffp_64": "EFI+SCM",
-    "ffw_16": "EFI+SCM",
-    "ffw_32": "EFI+SCM",
-    "ffw_64": "EFI+SCM",
-    "hsk": "IDPU",
-    "trg": "IDPU",
-    "state": "IDPU",
-    "esa": "ESA",
-    "sst": "SST",
-    "mom": "ESA+SST",
-    "scf": "SCM",
-    "scp": "SCM",
-    "scw": "SCM",
-    "scmode": "IDPU",
-}
+    except FileNotFoundError:
+        DATAROOT = "/disks/themisdata"
 
-L2_TYPES = [
-    "efi", "esa", "esd", "fbk", "fft", "fgm",
-    "fit", "gmom", "mom", "scm", "sst", "efw", "efp",
-]
 
-L2_TYPES_TO_INST = {
-    "efi": "EFI",
-    "esa": "ESA",
-    "esd": "ESA",
-    "fbk": "EFI+SCM",
-    "fft": "EFI+SCM",
-    "fgm": "FGM",
-    "fit": "EFI+FGM",
-    "gmom": "ESA+SST",
-    "mom": "ESA+SST",
-    "scm": "SCM",
-    "sst": "SST",
-    "efw": "EFI",
-    "efp": "EFI"
-}
+    PROBES = ["tha", "thb", "thc", "thd", "the"]
 
-ASI_SITES = [
-    "atha", "chbg", "ekat", "fsim", "fsmi", "fykn", "galo", "gbay",
-    "gill", "inuv", "kapu", "kian", "kuuj", "mcgr", "nrsq", "pgeo",
-    "pina", "rank", "snap", "snkq", "talo", "tpas", "whit", "yknf",
-]
+    L1_TYPES = [
+        "bau", "eff", "efp", "efw", "esa", "fbk",
+        "fff_16", "fff_32", "fff_64",
+        "ffp_16", "ffp_32", "ffp_64",
+        "ffw_16", "ffw_32", "ffw_64",
+        "fgm", "fit", "hsk", "mom",
+        "scmode", "scf", "scp", "scw", "sst", "state",
+        "trg", "vaf", "vap", "vaw", "vbf", "vbp", "vbw",
+    ]
 
-REGO_SITES = [
-    "atha","fsim","fsmi","gill","kakt","luck","lyrn","rank","resu","sach", "talo",
-]
+    L1_TYPES_TO_INST = {
+        "bau": "BAU",
+        "eff": "EFI",
+        "efp": "EFI",
+        "efw": "EFI",
+        "vaf": "EFI",
+        "vap": "EFI",
+        "vaw": "EFI",
+        "vbf": "EFI",
+        "vbp": "EFI",
+        "vbw": "EFI",
+        "fbk": "EFI+SCM",
+        "fgm": "FGM",
+        "fit": "FGM+EFI",
+        "fff_16": "EFI+SCM",
+        "fff_32": "EFI+SCM",
+        "fff_64": "EFI+SCM",
+        "ffp_16": "EFI+SCM",
+        "ffp_32": "EFI+SCM",
+        "ffp_64": "EFI+SCM",
+        "ffw_16": "EFI+SCM",
+        "ffw_32": "EFI+SCM",
+        "ffw_64": "EFI+SCM",
+        "hsk": "IDPU",
+        "trg": "IDPU",
+        "state": "IDPU",
+        "esa": "ESA",
+        "sst": "SST",
+        "mom": "ESA+SST",
+        "scf": "SCM",
+        "scp": "SCM",
+        "scw": "SCM",
+        "scmode": "IDPU",
+    }
 
+    L2_TYPES = [
+        "efi", "esa", "esd", "fbk", "fft", "fgm",
+        "fit", "gmom", "mom", "scm", "sst", "efw", "efp",
+    ]
+
+    L2_TYPES_TO_INST = {
+        "efi": "EFI",
+        "esa": "ESA",
+        "esd": "ESA",
+        "fbk": "EFI+SCM",
+        "fft": "EFI+SCM",
+        "fgm": "FGM",
+        "fit": "EFI+FGM",
+        "gmom": "ESA+SST",
+        "mom": "ESA+SST",
+        "scm": "SCM",
+        "sst": "SST",
+        "efw": "EFI",
+        "efp": "EFI"
+    }
+
+    ASI_SITES = [
+        "atha", "chbg", "ekat", "fsim", "fsmi", "fykn", "galo", "gbay",
+        "gill", "inuv", "kapu", "kian", "kuuj", "mcgr", "nrsq", "pgeo",
+        "pina", "rank", "snap", "snkq", "talo", "tpas", "whit", "yknf",
+    ]
+
+    REGO_SITES = [
+        "atha","fsim","fsmi","gill","kakt","luck","lyrn","rank","resu","sach", "talo",
+    ]
+    return(
+        {
+            "DATAROOT":DATAROOT,
+            "PROBES":PROBES,
+            "L1_TYPES":L1_TYPES,
+            "L1_TYPES_TO_INST":L1_TYPES_TO_INST,
+            "L2_TYPES":L2_TYPES,
+            "L2_TYPES_TO_INST":L2_TYPES_TO_INST,
+            "ASI_SITES":ASI_SITES,
+            "REGO_SITES":REGO_SITES,
+        }
+    )
 @dataclass
 class Measurement:
     date: date
@@ -314,7 +334,16 @@ def apid2inst(apid:str) -> str:
         return "BAU"
     return "unknown"
 
-def scan_day(day: date) -> list[Measurement]:
+def split_measurement(row: Measurement) -> list[Measurement]:
+    total_bytes = row.bytes
+    inst_string = row.instrument
+    inst_split = inst_string.split("+")
+    r1 = replace(row,instrument=inst_split[0],bytes=int(total_bytes/2.0))
+    r2 = replace(row,instrument=inst_split[1],bytes=int(total_bytes/2.0))
+    return([r1,r2])
+
+
+def scan_day(day: date, categories_dict: dict) -> list[Measurement]:
     parts = date_parts(day)
     YYYY = parts["YYYY"]
     MM = parts["MM"]
@@ -323,6 +352,15 @@ def scan_day(day: date) -> list[Measurement]:
     YYYYMMDD = parts["YYYYMMDD"]
 
     rows: list[Measurement] = []
+
+    DATAROOT=categories_dict["DATAROOT"]
+    PROBES=categories_dict["PROBES"]
+    L1_TYPES=categories_dict["L1_TYPES"]
+    L1_TYPES_TO_INST=categories_dict["L1_TYPES_TO_INST"]
+    L2_TYPES=categories_dict["L2_TYPES"]
+    L2_TYPES_TO_INST=categories_dict["L2_TYPES_TO_INST"]
+    ASI_SITES=categories_dict["ASI_SITES"]
+    REGO_SITES=categories_dict["REGO_SITES"]
 
     # Probe data
     for probe in PROBES:
@@ -347,9 +385,7 @@ def scan_day(day: date) -> list[Measurement]:
             basename = path.name
             apid = basename[7:10]
             inst = apid2inst(apid)
-            #print(f"Working on {path.name}, apid {apid}, inst {inst}")
-            rows.append(
-                make_l0_measurement(
+            row =  make_l0_measurement(
                     day=day,
                     domain="probe",
                     category="l0",
@@ -359,39 +395,50 @@ def scan_day(day: date) -> list[Measurement]:
                     probe=probe,
                     path=path,
                 )
-            )
+            if "+" in inst:
+                rows.extend(split_measurement(row))
+            else:
+                rows.append(row)
+
 
         # L1 by type
         for l1type in L1_TYPES:
             patt = f"{DATAROOT}/{probe}/l1/{l1type}/{YYYY}/*{YYYYMMDD}*"
-            rows.append(
-                make_measurement(
+            inst = L1_TYPES_TO_INST[l1type]
+            row = make_measurement(
                     day=day,
                     domain="probe",
                     category="l1",
                     level="l1",
                     probe=probe,
                     product_type=l1type,
-                    instrument=L1_TYPES_TO_INST[l1type],
+                    instrument=inst,
                     pattern=patt,
                 )
-            )
+            if "+" in inst:
+                rows.extend(split_measurement(row))
+            else:
+                rows.append(row)
 
         # L2 by type
         for l2type in L2_TYPES:
             patt = f"{DATAROOT}/{probe}/l2/{l2type}/{YYYY}/*{YYYYMMDD}*"
-            rows.append(
-                make_measurement(
+            inst = L2_TYPES_TO_INST[l2type]
+
+            row = make_measurement(
                     day=day,
                     domain="probe",
                     category="l2",
                     level="l2",
                     probe=probe,
                     product_type=l2type,
-                    instrument=L2_TYPES_TO_INST[l2type],
+                    instrument=inst,
                     pattern=patt,
                 )
-            )
+            if "+" in inst:
+                rows.extend(split_measurement(row))
+            else:
+                rows.append(row)
 
     # Ground / plots
     patt = f"{DATAROOT}/thg/l0/asi/{YYYY}/{MM}/*{YYYY}-{MM}-{DD}*"
@@ -529,70 +576,10 @@ def scan_day(day: date) -> list[Measurement]:
 
     return rows
 
-import argparse
-from datetime import datetime, timedelta, date
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Scan THEMIS data volumes over a date range"
-    )
-    parser.add_argument(
-        "start_date",
-        help="Start date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "end_date",
-        help="End date (YYYY-MM-DD, inclusive)"
-    )
-    return parser.parse_args()
-
-
-def daterange(start: date, end: date):
-    current = start
-    while current <= end:
-        yield current
-        current += timedelta(days=1)
-
-def expand_instrument_allocations(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Expand rows with mixed instruments like 'EFI+FGM' into multiple rows
-    with fractional allocations.
-
-    Requires:
-        - df['instrument']
-        - df['gb']   (or use bytes instead; see note below)
-    """
-    expanded_rows = []
-
-    for _, row in df.iterrows():
-        instrument = row["instrument"]
-
-        if pd.isna(instrument) or instrument is None:
-            # Keep uninstrumented rows as-is
-            new_row = row.copy()
-            new_row["allocated_instrument"] = instrument
-            new_row["allocation_fraction"] = 1.0
-            new_row["allocated_bytes"] = row["bytes"]
-            new_row["allocated_gb"] = row["bytes"]/1_000_000_000
-            expanded_rows.append(new_row)
-            continue
-
-        parts = [part.strip() for part in str(instrument).split("+")]
-        frac = 1.0 / len(parts)
-
-        for part in parts:
-            new_row = row.copy()
-            new_row["allocated_instrument"] = part
-            new_row["allocation_fraction"] = frac
-            new_row["allocated_bytes"] = row["bytes"] * frac
-            new_row["allocated_gb"] = row["bytes"] * frac/1_000_000_000
-            expanded_rows.append(new_row)
-
-    return pd.DataFrame(expanded_rows)
-
 def run_product_volume(start_date:str, end_date:str) -> None:
-    args = parse_args()
+    import sys
+    # Set line buffering to avoid long pauses when viewing output with 'tail'
+    sys.stdout.reconfigure(line_buffering=True)
 
     start = datetime.strptime(start_date, "%Y-%m-%d").date()
     end = datetime.strptime(end_date, "%Y-%m-%d").date()
@@ -600,13 +587,14 @@ def run_product_volume(start_date:str, end_date:str) -> None:
     all_measurements = []
 
     print(f"Processing date range: {start} to {end}\n")
+    categories_dict = get_categories()
 
     for day in daterange(start, end):
         print("=" * 60)
         print(f"Processing {day}")
         print("=" * 60)
 
-        measurements = scan_day(day)
+        measurements = scan_day(day, categories_dict)
         df = measurements_to_dataframe(measurements)
 
         # Optional: print a compact per-day summary
@@ -651,32 +639,8 @@ def run_product_volume(start_date:str, end_date:str) -> None:
     print("\nProbe L0+L1+l2 Breakdown by instrument:")
     print(df_all[(df_all["domain"] == "probe") &  (df_all["level"]!="vc")].groupby("instrument")["gb"].sum().sort_values(ascending=False))
 
-    # Allocate mixed "intstruments" like EFI+SCM equally to their components
-
-    print("Reallocating instrument subtotals...")
-    allocated_df = expand_instrument_allocations(df_all)
-    print("Reallocation complete")
-
-    # Now report reallocated instrument totals
-
-    # Optional: deeper breakdown
-    print("\nBreakdown by category:")
-    print(allocated_df.groupby("category")["gb"].sum().sort_values(ascending=False))
-
-    # Optional: deeper breakdown
-    print("\nProbe L0 Breakdown by allocated instrument:")
-    print(allocated_df[(allocated_df["domain"] == "probe") &  (allocated_df["level"]=="l0")].groupby("allocated_instrument")["allocated_gb"].sum().sort_values(ascending=False))
-
-    print("\nProbe L1 Breakdown by allocated instrument:")
-    print(allocated_df[(allocated_df["domain"] == "probe") &  (allocated_df["level"]=="l1")].groupby("allocated_instrument")["allocated_gb"].sum().sort_values(ascending=False))
-
-    print("\nProbe L2 Breakdown by allocated instrument:")
-    print(allocated_df[(allocated_df["domain"] == "probe") &  (allocated_df["level"]=="l2")].groupby("allocated_instrument")["allocated_gb"].sum().sort_values(ascending=False))
-
-    print("\nProbe L0+L1+l2 Breakdown by allocated instrument:")
-    print(allocated_df[(allocated_df["domain"] == "probe") &  (allocated_df["level"]!="vc")].groupby("allocated_instrument")["allocated_gb"].sum().sort_values(ascending=False))
-
-
+    print("Alternate L0+L1+L2 breakdown format")
+    print(df_all[(df_all["domain"] == "probe") & (df_all["level"]!="vc")].groupby(["instrument", "level"])["gb"].sum())
 
 if __name__ == '__main__':
     run_product_volume('2026-04-14','2026-04-14')

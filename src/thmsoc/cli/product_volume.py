@@ -23,4 +23,8 @@ def main() -> int:
     return 0
 
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 3:
+        print("Using default time range 2026-04-14 (single day)")
+        sys.argv=["product_volume","2026-04-14","2026-04-14"]
     raise SystemExit(main())

@@ -6,7 +6,7 @@ from pathlib import Path
 from glob import glob
 import tomli
 from datetime import datetime, date
-from thmsoc.daterange import daterange
+from thmsoc.daterange import daterange, args_to_startend
 
 
 def get_categories() -> dict:
@@ -576,13 +576,12 @@ def scan_day(day: date, categories_dict: dict) -> list[Measurement]:
 
     return rows
 
-def run_product_volume(start_date:str, end_date:str) -> None:
+def run_product_volume(start_date:str=None, end_date:str = None, days:int = None) -> None:
     import sys
     # Set line buffering to avoid long pauses when viewing output with 'tail'
     sys.stdout.reconfigure(line_buffering=True)
 
-    start = datetime.strptime(start_date, "%Y-%m-%d").date()
-    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    start, end = args_to_startend(start_date, end_date, days)
 
     all_measurements = []
 
@@ -643,4 +642,4 @@ def run_product_volume(start_date:str, end_date:str) -> None:
     print(df_all[(df_all["domain"] == "probe") & (df_all["level"]!="vc")].groupby(["instrument", "level"])["gb"].sum())
 
 if __name__ == '__main__':
-    run_product_volume('2026-04-14','2026-04-14')
+    run_product_volume(start_date='2026-04-14',days=1)

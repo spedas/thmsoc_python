@@ -12,7 +12,7 @@ dependencies = [
     "numpy",
     "scipy",
     "pyspedas",
-    "tomli"
+    "tomli",
     "uv",
 ]
 

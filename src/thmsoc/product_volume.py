@@ -6,7 +6,7 @@ from pathlib import Path
 from glob import glob
 import tomli
 from datetime import datetime, date
-from thmsoc.daterange import daterange, args_to_startend
+from thmsoc.daterange import simple_daterange, args_to_startend
 
 
 def get_categories() -> dict:
@@ -588,7 +588,7 @@ def run_product_volume(start_date:str=None, end_date:str = None, days:int = None
     print(f"Processing date range: {start} to {end}\n")
     categories_dict = get_categories()
 
-    for day in daterange(start, end):
+    for day in simple_daterange(start, end):
         print("=" * 60)
         print(f"Processing {day}")
         print("=" * 60)

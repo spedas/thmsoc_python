@@ -32,8 +32,12 @@ Copy this to "thmsoc_python_config.toml" in the top level directory, then edit t
 For example, if you're testing on your laptop, you probably don't have /disks/themisdata available, 
 but you probably have a SPEDAS data directory...use the 'themis' subdirectory as 'input_dataroot'.
 
+Note for Windows users:  TOML parsers interpret a single '\\' as an escape character.  To avoid this issue when specifying Windows
+paths, you can use forward slash characters '/', or double backslashes, '\\\\', to separate path components.
+
 If you're developing on one of the lab machines, you can read from /disks/themisdata, but 
 won't be able to write to it unless you're logged in as 'thmsoc' (not recommended for testing!).  
+
 If you're testing a script that would normally create output files under /disks/themisdata, set 'output_dataroot' to someplace where you have write permission.
 
 A complete bootstrap process for installing thmsoc_python for personal use would look like this:
@@ -46,7 +50,7 @@ A complete bootstrap process for installing thmsoc_python for personal use would
 6) Source the activation script again to pick up the .venv's uv that just got installed
 7) Copy example_thmsoc_python_config.toml to thmsoc_python_config.toml and customize as needed
 7) Create an editable install:  `uv pip install -e .`
-8) See if it worked: try calling `product_volume 2026-01-01 2026-01-31` (or date range of your choice) and see if the report is generated correctly.
+8) See if it worked: try calling `product_volume -s 2026-01-01 -e 2026-01-31` (or date range of your choice) and see if the report is generated correctly.
 
 Alternate method using PyCharm (might be better for a laptop installation):  File->Project from Version Control, 
 navigate to the thmsoc_python repo, then use PyCharm to set up the venv. Copy and customize thmsoc_python_config.toml.
@@ -71,6 +75,101 @@ If any changes were made to example_thmsoc_python_config.toml, propagate them to
 
 When doing a `git pull` to update your personal installation, you should also use the above steps
 to make sure your venv and local config are fully updated.
+
+## Available scripts
+
+So far, we have:
+
+product_volume:  Create a report of data volume in various categories over a time range.
+
+```
+usage: product_volume [-h] [-s START_DATE] [-e END_DATE] [-d DAYS]
+
+options:
+  -h, --help            show this help message and exit
+  -s START_DATE, --start_date START_DATE
+                        start date (YYYY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YYYY-MM-DD)
+  -d DAYS, --days DAYS  Duration (days)
+```
+
+gen_summary_plot_batches:  Create a master list and a set of IDL .bm batch files for processing summary plots
+
+```
+usage: gen_summary_plot_batches [-h] [-s START_DATE] [-e END_DATE] [-d DAYS] -t [{over,esa,fgm,sst,memory,fitmom,fitgmom,fftfbk,fgmdyn,all} ...] [-b BATCH_DAYS] -o
+                                OUTPUT_DIRECTORY
+
+options:
+  -h, --help            show this help message and exit
+  -s START_DATE, --start_date START_DATE
+                        start date (YYYY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YYYY-MM-DD)
+  -d DAYS, --days DAYS  Duration (days)
+  -t [{over,esa,fgm,sst,memory,fitmom,fitgmom,fftfbk,fgmdyn,all} ...], --summary_plot_types [{over,esa,fgm,sst,memory,fitmom,fitgmom,fftfbk,fgmdyn,all} ...]
+                        Plots to create
+  -b BATCH_DAYS, --batch_days BATCH_DAYS
+                        Days per batch to process
+  -o OUTPUT_DIRECTORY, --output_directory OUTPUT_DIRECTORY
+                        Directory where master list and batch files will be written
+```
+
+gen_l2_batches: Create a master list and a set of IDL .bm batch files for processing L2 products
+
+```
+usage: gen_l2_batches [-h] [-s START_DATE] [-e END_DATE] [-d DAYS] -t [{fgm,fbk,fit,esa,mom,gmom,sst,fft,scm,efi,efp,efw,scmode,all} ...] -p [{a,b,c,d,e,all} ...]
+                      [-b BATCH_DAYS] -o OUTPUT_DIRECTORY
+
+options:
+  -h, --help            show this help message and exit
+  -s START_DATE, --start_date START_DATE
+                        start date (YYYY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YYYY-MM-DD)
+  -d DAYS, --days DAYS  Duration (days)
+  -t [{fgm,fbk,fit,esa,mom,gmom,sst,fft,scm,efi,efp,efw,scmode,all} ...], --l2_types [{fgm,fbk,fit,esa,mom,gmom,sst,fft,scm,efi,efp,efw,scmode,all} ...]
+                        L2 files to create
+  -p [{a,b,c,d,e,all} ...], --probes [{a,b,c,d,e,all} ...]
+                        Probes to process
+  -b BATCH_DAYS, --batch_days BATCH_DAYS
+                        Days per batch to process
+  -o OUTPUT_DIRECTORY, --output_directory OUTPUT_DIRECTORY
+                        Directory where master list and batch files will be written
+```
+
+## Standard argument processing
+
+thmsoc_python uses the argparse library to support consistent, reusable argument naming and handling 
+across the various utilities. See src/thmsoc/arguments.py and the CLI script files for implementation details.
+
+### Time range specification
+
+```
+  -s START_DATE, --start_date START_DATE
+                        start date (YYYY-MM-DD)
+  -e END_DATE, --end_date END_DATE
+                        end date (YYYY-MM-DD)
+  -d DAYS, --days DAYS  Duration (days)
+```
+
+Any two of these options suffice to define a time range: explicit start and end dates, or a start date
+and duration, or an end date and duration.  The end date is included in the processing to be performed.
+
+### Batching
+
+```
+  -b BATCH_DAYS, --batch_days BATCH_DAYS
+                        Days per batch to process
+```
+
+### Probe specification
+
+```
+  -p [{a,b,c,d,e,all} ...], --probes [{a,b,c,d,e,all} ...]
+                        Probes to process
+```
+
 
 
 

@@ -18,6 +18,8 @@ dependencies = [
 
 [project.scripts]
 product_volume = "thmsoc.cli.product_volume:main"
+gen_l2_batches = "thmsoc.cli.gen_l2_batches:main"
+gen_summary_plot_batches = "thmsoc.cli.gen_summary_plot_batches:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

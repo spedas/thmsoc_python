@@ -99,6 +99,76 @@ def get_categories() -> dict:
     REGO_SITES = [
         "atha","fsim","fsmi","gill","kakt","luck","lyrn","rank","resu","sach", "talo",
     ]
+
+    # GMAG Categories:
+    GMAG_USGS_SOURCE_URL = {
+        "DATA_NETLOC" : "geomag.usgs.gov",
+        "VARIOMETER_DATA_PATH" : "/ws/algorithms/filter/",
+        "VARIOMETER_METADATA_NETLOC" : "service.iris.edu",
+        "VARIOMETER_METADATA_AVAILABILITY_PATH" : "/fdsnws/availability/1/extent",
+        "VARIOMETER_METADATA_UPDATEHISTORY_PATH" : "/irisws/metadatachange/1/query"
+    }
+    GMAG_USGS_VARIOMETER_SITES = [
+        'anmo','casy','ccm' ,'cola','cor' ,'dgmt','dwpf','ecsd','eymn','e46a',
+        'e62a','goga','hrv' ,'j47a','kbs' ,'kevo','kono','ksu1','k30b','k50a',
+        'mbwa','mstx','m63a','o20a','pab' ,'p57a','qspa','rssd','r49a','sba' ,
+        'sfjd','spmn','sspa','s61a','t47a','u38b','wci' ,'whtx','wvt' ,'352a',
+        'k62a','n51a','n53a','bouv','s39b','t57a','x48a','y49a','154a','456a',
+        'midw']
+    GMAG_USGS_VARIOMETER_SITES_TO_SOURCEALIAS = {
+        'anmo': 'anmo',
+        'casy': 'casy',
+        'ccm' : 'ccm' ,
+        'cola': 'cola',
+        'cor' : 'cor' ,
+        'dgmt': 'dgmt',
+        'dwpf': 'dwpf',
+        'ecsd': 'ecsd',
+        'eymn': 'eymn',
+        'e46a': 'e46a',
+        'e62a': 'e62a',
+        'goga': 'goga',
+        'hrv' : 'hrv' ,
+        'j47a': 'j47a',
+        'kbs' : 'kbs' ,
+        'kevo': 'kev' ,
+        'kono': 'kono',
+        'ksu1': 'ksu1',
+        'k30b': 'k30b',
+        'k50a': 'k50a',
+        'mbwa': 'mbwa',
+        'mstx': 'mstx',
+        'm63a': 'm63a',
+        'o20a': 'o20a',
+        'pab' : 'pab' ,
+        'p57a': 'p57a',
+        'qspa': 'qspa',
+        'rssd': 'rssd',
+        'r49a': 'r49a',
+        'sba' : 'sba' ,
+        'sfjd': 'sfjd',
+        'spmn': 'spmn',
+        'sspa': 'sspa',
+        's61a': 's61a',
+        't47a': 't47a',
+        'u38b': 'u38b',
+        'wci' : 'wci' ,
+        'whtx': 'whtx',
+        'wvt' : 'wvt' ,
+        '352a': '352a',
+        'k62a': 'k62a',
+        'n51a': 'n51a',
+        'n53a': 'n53a',
+        'bouv': 'bouv',
+        's39b': 's39b',
+        't57a': 't57a',
+        'x48a': 'x48a',
+        'y49a': 'y49a',
+        '154a': '154a',
+        '456a': '456a',
+        'midw': 'midw'
+    }
+    
     return(
         {
             "DATAROOT":DATAROOT,
@@ -109,6 +179,9 @@ def get_categories() -> dict:
             "L2_TYPES_TO_INST":L2_TYPES_TO_INST,
             "ASI_SITES":ASI_SITES,
             "REGO_SITES":REGO_SITES,
+            "GMAG_USGS_SOURCE_URL":GMAG_USGS_SOURCE_URL,
+            "GMAG_USGS_VARIOMETER_SITES":GMAG_USGS_VARIOMETER_SITES,
+            "GMAG_USGS_VARIOMETER_SITES_TO_SOURCEALIAS":GMAG_USGS_VARIOMETER_SITES_TO_SOURCEALIAS
         }
     )
 @dataclass

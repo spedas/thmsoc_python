@@ -34,6 +34,17 @@ valid_l2_vals = ['fgm','fbk','fit','esa', 'mom','gmom','sst', 'fft', 'scm', 'efi
 valid_l2_args = valid_l2_vals
 valid_l2_args.append('all')
 
+# THEMIS alias for USGS Variometer station codes
+valid_gmag_usgs_variometer_station_vals = [
+    'anmo','casy','ccm' ,'cola','cor' ,'dgmt','dwpf','ecsd','eymn','e46a',
+    'e62a','goga','hrv' ,'j47a','kbs' ,'kevo','kono','ksu1','k30b','k50a',
+    'mbwa','mstx','m63a','o20a','pab' ,'p57a','qspa','rssd','r49a','sba' ,
+    'sfjd','spmn','sspa','s61a','t47a','u38b','wci' ,'whtx','wvt' ,'352a',
+    'k62a','n51a','n53a','bouv','s39b','t57a','x48a','y49a','154a','456a',
+    'midw']
+valid_gmag_usgs_variometer_station_args = valid_gmag_usgs_variometer_station_vals
+valid_gmag_usgs_variometer_station_args.append('all')
+
 def add_probe_arguments(p:argparse.ArgumentParser) -> None:
     p.add_argument("-p", "--probes", help="Probes to process", required=True, nargs='*', choices=valid_probe_args)
 
@@ -60,3 +71,12 @@ def expand_l2_arguments(args:argparse.Namespace) -> list[str]:
         return valid_l2_vals
     else:
         return args.l2_types
+
+def add_station_arguments(p:argparse.ArgumentParser) -> None:
+    p.add_argument("-c", "--station_codes", help="Stations to process, as THEMIS station code alias", nargs='*', choices=valid_gmag_usgs_variometer_station_args)
+
+def expand_station_arguments(args:argparse.Namespace) -> list[str]:
+    if 'all' in args.station_codes:
+        return valid_gmag_usgs_variometer_station_args
+    else:
+        return args.station_codes

@@ -11,19 +11,6 @@ from thmsoc import args_to_startend, batch_daterange
 from concurrent import futures
 import xml.etree.ElementTree as ET
 
-thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
-thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
-try:
-    with open(thmsoc_python_config, "rb") as f:
-        toml_dict = tomli.load(f)
-        OUTDATAROOT = Path(toml_dict["paths"]["output_dataroot"])
-except FileNotFoundError:
-    OUTDATAROOT = Path("/disks/themisdata")
-
-# The workdir is based on the output data rood directory, normally /disks/themisdata
-variometer_workdir = Path(f"{OUTDATAROOT}/workdir/usgs_variometer2do")
-mysql_workdir = Path(f"{OUTDATAROOT}/workdir/mysql_db_queries")
-
 def list_max(in_list:list):
     list_unique = list(dict.fromkeys(in_list))
     list_unique.sort()
@@ -210,7 +197,13 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
     print("-> " + station_code.upper() + " data last calibrated on " + cal_date_latest_str)
     return cal_date_latest_str
 
-def retrieve_a_file(station_code:str,data_date:dt.datetime,sampling_rate:str='1',max_num_retries:int=0) -> dict:
+def retrieve_a_file(
+        station_code:str,
+        data_date:dt.datetime,
+        variometer_workdir:Path,
+        mirror_dir=None,
+        sampling_rate:str='1',
+        max_num_retries:int=0) -> dict:
     out_dict = {"LastAttemptedAccessTime":"","LastSuccessfulAccessTime":"","error_status":""}
     # use sampling_rate arg to define additional retrieval parameters
     match sampling_rate:
@@ -218,13 +211,17 @@ def retrieve_a_file(station_code:str,data_date:dt.datetime,sampling_rate:str='1'
             sampling_period_val='1'
             workdir_subdir = Path(f"{variometer_workdir}/{sampling_rate}_hz")
             Path(workdir_subdir).mkdir(parents=True, exist_ok=True)
-            output_filepath = Path(f"{workdir_subdir}/{station_code}{data_date.strftime('%Y%m%d')}vsec.sec")
+            output_filepath_list = [Path(f"{workdir_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vsec.sec")]
+            if mirror_dir is not None:
+                mirror_subdir = Path(f"{mirror_dir}/{station_code.lower()}/1_hz/{data_date.strftime('%Y')}/{data_date.strftime('%m')}")
+                mirror_subdir.mkdir(parents=True, exist_ok=True)
+                output_filepath_list.append(Path(f"{mirror_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vsec.sec"))
             duration=24 # duration of each segment, in hours
         case '10':
             sampling_period_val='0.1'
             workdir_subdir = Path(f"{variometer_workdir}/{sampling_rate}_hz")
             Path(workdir_subdir).mkdir(parents=True, exist_ok=True)
-            output_filepath = Path(f"{workdir_subdir}/{station_code}{data_date.strftime('%Y%m%d')}vdec.dec")
+            output_filepath_list = [Path(f"{workdir_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vdec.dec")]
             duration=4 # duration of each segment, in hours
         case _:
             print("ERROR: Sampling rate not recognized")
@@ -313,41 +310,78 @@ def retrieve_a_file(station_code:str,data_date:dt.datetime,sampling_rate:str='1'
     out_dict["LastSuccessfulAccessTime"] = dt.datetime.strftime(start_time_1file,'%Y-%m-%d %H:%M:%S')
     
     # If output file path already exists, delete it and create a new one:
-    output_filepath.unlink(missing_ok=True)
-    output_file = open(output_filepath, "x")
-    output_file.close()
+    for output_filepath in output_filepath_list:    
+        output_filepath.unlink(missing_ok=True)
+        output_file = open(output_filepath, "x")
+        output_file.close()
     
-    # For each url response string, append to new file. Only keep the header for the first string:
-    for url_response_string_list_idx in range(len(url_response_string_list)):
-        url_response_string = url_response_string_list[url_response_string_list_idx]    
-        # if the url response string comes first in the list, keep the header; otherwise, remove lines containing the | character followed by a newline:
-        if url_response_string_list_idx == 0:
-            string_towrite = url_response_string
-        else:
-            string_towrite = re.sub(r".*\|\n", "", url_response_string)
-        with open(output_filepath, "a") as of:
-            of.write(string_towrite)
+        # For each url response string, append to new file. Only keep the header for the first string:
+        for url_response_string_list_idx in range(len(url_response_string_list)):
+            url_response_string = url_response_string_list[url_response_string_list_idx]    
+            # if the url response string comes first in the list, keep the header; otherwise, remove lines containing the | character followed by a newline:
+            if url_response_string_list_idx == 0:
+                string_towrite = url_response_string
+            else:
+                string_towrite = re.sub(r".*\|\n", "", url_response_string)
+            with open(output_filepath, "a") as of:
+                of.write(string_towrite)
     
     end_time_1file = dt.datetime.now()
     print("File writing complete. Elapsed %.0f seconds." % (end_time_1file - writing_start_time).seconds)
     print("Total file retrieval complete. Elapsed time: %.0f seconds." % (end_time_1file - start_time_1file).seconds)
     return out_dict
 
-def retrieve_files(station_list:list[str], start_date=None, end_date=None, days=None, sampling_rate:str = '1', fp_db_update=None,output_directory=None,max_num_retries:int=0) -> str:
-    # Parse arguments to get start and end datetime values: 
-    dt_start,dt_end = args_to_startend(start_date, end_date, days)
+def run_gmag_retrieve_usgs_variometer(
+        station_list:list[str], 
+        start_date=None, 
+        end_date=None, 
+        days=None, 
+        output_p_str:str="",
+        issue_list_fp_str:str="", 
+        db_update_fp_str:str="", 
+        sampling_rate:str = '1', 
+        max_num_retries:int=0) -> int:
+    main_start_time = dt.datetime.now()
+    str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
+
+    thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
+    thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
+    try:
+        with open(thmsoc_python_config, "rb") as f:
+            toml_dict = tomli.load(f)
+            OUTDATAROOT = Path(toml_dict["paths"]["output_dataroot"])
+    except FileNotFoundError:
+        OUTDATAROOT = Path("/disks/themisdata")
     
-    # If filepath to database update sql file has not been set, create one:
-    if fp_db_update is None:
-        dt_run = dt.datetime.now()
-        str_datetime_run = dt_run.strftime('%Y%m%d') # _%H%M%S
+    # Set variometer_workdir as output directory has been passed; otherwise use default. Additionally, add mirror directory if the sample rate is 1:
+    variometer_workdir = Path(f"{OUTDATAROOT}/workdir/usgs_variometer2do")
+    variometer_mirrordir = None
+    if output_p_str != "":
+        variometer_workdir = Path(f"{output_p_str}")
+    else:
+        if sampling_rate == '1':
+            variometer_mirrordir = Path(f"{OUTDATAROOT}/thg/mirrors/variometers/usgs_ascii")
+            variometer_mirrordir.mkdir(parents=True, exist_ok=True)
+    # shouldn't need to make workdir in practice, but including here to be safe:
+    variometer_workdir.mkdir(parents=True, exist_ok=True)
+    
+    # Set sql filepath to database update sql file has not been set, create one:
+    if db_update_fp_str != "":
+        fp_db_update = Path(f"{db_update_fp_str}")
+    else:    
+        mysql_workdir = Path(f"{OUTDATAROOT}/workdir/mysql_db_queries")
+        mysql_workdir.mkdir(parents=True, exist_ok=True)
         fp_db_update = Path(f"{mysql_workdir}/gmag_retrieve_usgs_variometers_{str_datetime_run}.sql")
+    
     # If filepath to database update sql file already exists, delete it and create a new one:
     fp_db_update.unlink(missing_ok=True)
     sqldbf = open(fp_db_update, "x")
     sqldbf.close()
     db_table = "usgs_" + sampling_rate + "_hz_retrieval_processing_history"
-
+    
+    # Parse arguments to get start and end datetime values:
+    dt_start,dt_end = args_to_startend(start_date, end_date, days)
+    
     # Get latest calibration date for each station in station list: 
     cal_check_start_time = dt.datetime.now()
     print("--- Checking latest calibration dates... ---")
@@ -363,12 +397,18 @@ def retrieve_files(station_list:list[str], start_date=None, end_date=None, days=
         current_date = date_batch[0]
         # Retrieve files for each station at this current date:
         for station_code in station_list:
-            print("--- Attempting to retrieve "+ station_code.upper() + " data for " + current_date.strftime('%Y-%m-%d') + " ---")
+            print("--- Attempting to retrieve "+ station_code.upper() + " data for " + current_date.strftime('%Y-%m-%d') + " at sampling rate: " + sampling_rate + "Hz ---")
             # Initialize dictionary containing results of attempted retrieval for given station and date:
             result_dict = {"LastAttemptedAccessTime":"","LastSuccessfulAccessTime":"","error_status":""}
             # If file is available, for given station and date, attempt to retrieve it:
             if get_usgs_variometer_avail(station_code,current_date):
-                result_dict = retrieve_a_file(station_code=station_code,data_date=current_date,sampling_rate=sampling_rate,max_num_retries=max_num_retries)
+                result_dict = retrieve_a_file(
+                    station_code=station_code,
+                    data_date=current_date,
+                    variometer_workdir=variometer_workdir,
+                    mirror_dir=variometer_mirrordir,
+                    sampling_rate=sampling_rate,
+                    max_num_retries=max_num_retries)
             result_dict["site"] = station_code
             result_dict["DataDate"] = current_date.strftime('%Y-%m-%d')
             if result_dict["LastSuccessfulAccessTime"] != "":
@@ -379,26 +419,27 @@ def retrieve_files(station_list:list[str], start_date=None, end_date=None, days=
                 #of.write(sql_insert_update_query(db_table=db_table, in_dict=result_dict))
             if result_dict["error_status"] != "":
                 missing_file_list += "Station: " + station_code.upper() + ", Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-    return missing_file_list
+    print("--- Script complete. Elapsed %.0f seconds ---" % (dt.datetime.now() - main_start_time).seconds)
+    if missing_file_list != "":
+        print("Retrieval was attempted for the following files, but failed for the following reasons: ")
+        print(missing_file_list)
+        # Make directory if it doesn't exist:
+        failed_list_p = Path(f"{OUTDATAROOT}/process_logs/gmag/webdownloads/variometers/usgs/{sampling_rate}_hz")
+        if issue_list_fp_str != "":
+            failed_list_fp = Path(f"{issue_list_fp_str}")
+        else:
+            failed_list_p.mkdir(parents=True, exist_ok=True)
+            failed_list_fp = Path(f"{failed_list_p}/failed_list{str_datetime_run}.txt")
+        # Create file and print missing file list to file:
+        failed_list_fp.unlink(missing_ok=True)
+        failedf = open(failed_list_fp, "x")
+        failedf.close()
+        with open(failed_list_fp, "a") as of:
+            print(missing_file_list, file=of)
+        return 1
+    else:      
+        return 0
 
 if __name__ == "__main__":
-    #print("Starting script...")
-    main_start_time = dt.datetime.now()
-    missing_file_list = retrieve_files(start_date="2025-11-17",end_date="2025-11-19", station_list=['anmo','s61a'],sampling_rate='10')
-    print("Retrieval was attempted for the following files, but failed for the following reasons: ")
-    print(missing_file_list) 
-    #retrieve_files(start_date="2025-11-17",end_date="2025-11-19", station_list=['anmo','s61a'],sampling_rate='1')
+    run_gmag_retrieve_usgs_variometer(start_date="2025-11-17",end_date="2025-11-19", station_list=['anmo','s61a'],sampling_rate='10')
     
-    # retrieve_files(start_date="2025-11-17",end_date="2025-11-17",days=1, station_list=['anmo'],sampling_rate='10')
-    
-    #default_station_name="anmo"
-    #default_date_str="2025-11-17"
-    #default_date=datetime.strptime(default_date_str, '%Y-%m-%d').date()
-    #default_sampling_rate="10"
-    #retrieve_a_file(station_name=default_station_name,data_date=default_date,sampling_rate=default_sampling_rate)
-    #retrieve_a_file(station_name=default_station_name,data_date=default_date + timedelta(days=1) ,sampling_rate=default_sampling_rate)
-    #retrieve_a_file(station_name=default_station_name,data_date=default_date + timedelta(days=2) ,sampling_rate=default_sampling_rate)
-    #url_response_bytes_list = retrieve_a_file(station_name=default_station_name,data_date=default_date,sampling_rate=default_sampling_rate)
-    #duration=4
-
-    print("--- Script complete. Elapsed %.0f seconds ---" % (dt.datetime.now() - main_start_time).seconds)

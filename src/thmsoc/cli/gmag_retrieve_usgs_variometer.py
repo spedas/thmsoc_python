@@ -1,8 +1,6 @@
 
 # src/thmsoc/cli/gmag_retrieve_usgs_variometer.py
 import argparse
-#from thmsoc.dates import parse_date
-#from thmsoc.logging_config import setup_logging
 from thmsoc.gmag_retrieve_usgs_variometer import run_gmag_retrieve_usgs_variometer
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_station_arguments

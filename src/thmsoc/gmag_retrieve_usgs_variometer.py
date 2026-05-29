@@ -1,12 +1,9 @@
 # src/thmsoc/gmag_retrieve_usgs_variometer.py
-
 import datetime as dt
 import urllib3
-#from urllib3.util import Retry
 from pathlib import Path
 import tomli
 import re
-#import http.client
 from thmsoc import args_to_startend, batch_daterange
 from concurrent import futures
 import xml.etree.ElementTree as ET

@@ -154,7 +154,7 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
     print("Checking " + station_code.upper() + " latest calibration date...")
     cal_date_latest_str = ""
     url = construct_web_query(
-        web_netloc='service.iris.edu',
+        web_netloc='service.earthscope.org', # renamed from 'service.iris.edu'
         web_path='/irisws/metadatachange/1/query',
         query_list=[
             ('station',[get_source_alias(station_code).upper()]),

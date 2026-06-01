@@ -115,7 +115,9 @@ def get_source_alias(station_code:str) -> str:
 
 def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime):
     print("Checking "+ station_code.upper() +" availability for date: " + data_date.strftime('%Y-%m-%d') + "...") 
-    avail_netloc='service.iris.edu'
+    #avail_netloc='service.iris.edu' 
+    # Setting network location to earthscope since iris should be getting discontinued:
+    avail_netloc='service.earthscope.org' 
     avail_path='/fdsnws/availability/1/extent'
     # add channel at end:
     avail_query=[

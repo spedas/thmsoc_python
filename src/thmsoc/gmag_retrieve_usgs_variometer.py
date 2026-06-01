@@ -310,24 +310,26 @@ def retrieve_a_file(
     
     # If output file path already exists, delete it and create a new one:
     for output_filepath in output_filepath_list:    
-        output_filepath.unlink(missing_ok=True)
-        output_file = open(output_filepath, "x")
-        output_file.close()
-    
-        # For each url response string, append to new file. Only keep the header for the first string:
-        for url_response_string_list_idx in range(len(url_response_string_list)):
-            url_response_string = url_response_string_list[url_response_string_list_idx]    
-            # if the url response string comes first in the list, keep the header; otherwise, remove lines containing the | character followed by a newline:
-            if url_response_string_list_idx == 0:
-                string_towrite = url_response_string
-            else:
-                string_towrite = re.sub(r".*\|\n", "", url_response_string)
-            with open(output_filepath, "a") as of:
-                of.write(string_towrite)
-    
-    end_time_1file = dt.datetime.now()
-    print("File writing complete. Elapsed %.0f seconds." % (end_time_1file - writing_start_time).seconds)
-    print("Total file retrieval complete. Elapsed time: %.0f seconds." % (end_time_1file - start_time_1file).seconds)
+        try:
+            output_filepath.unlink(missing_ok=True)
+            output_file = open(output_filepath, "x")
+            output_file.close()
+            # For each url response string, append to new file. Only keep the header for the first string:
+            for url_response_string_list_idx in range(len(url_response_string_list)):
+                url_response_string = url_response_string_list[url_response_string_list_idx]    
+                # if the url response string comes first in the list, keep the header; otherwise, remove lines containing the | character followed by a newline:
+                if url_response_string_list_idx == 0:
+                    string_towrite = url_response_string
+                else:
+                    string_towrite = re.sub(r".*\|\n", "", url_response_string)
+                with open(output_filepath, "a") as of:
+                    of.write(string_towrite)
+            end_time_1file = dt.datetime.now()
+            print("File writing complete. Elapsed %.0f seconds." % (end_time_1file - writing_start_time).seconds)
+            print("Total file retrieval complete. Elapsed time: %.0f seconds." % (end_time_1file - start_time_1file).seconds)            
+        except:
+            print("ERROR! The output file could not be written: " + str(output_filepath))
+            out_dict["error_status"] = "Failed to write data to output file."
     return out_dict
 
 def run_gmag_retrieve_usgs_variometer(
@@ -440,5 +442,5 @@ def run_gmag_retrieve_usgs_variometer(
         return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_usgs_variometer(start_date="2025-11-17",end_date="2025-11-19", station_list=['anmo','s61a'],sampling_rate='10')
+    run_gmag_retrieve_usgs_variometer(start_date="2025-11-17",end_date="2025-11-17", station_list=['s61a'],sampling_rate='10')
     

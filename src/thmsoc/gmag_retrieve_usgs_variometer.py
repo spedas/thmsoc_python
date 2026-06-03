@@ -18,6 +18,8 @@ def decode2string(bytes_response):
     # TODO: create some kind of setting which can be updated to choose incomplete and protocol error responses. 
     try:
         bytes_response_read = bytes_response.read()
+        # we should be able to safely close the original url responses:
+        bytes_response.close()
     except urllib3.exceptions.IncompleteRead:
         # kluge since http.client.IncompleteRead has been thrown in process of handling exception:
         try: 
@@ -82,7 +84,7 @@ def construct_usgs_query(
 def sql_insert_update_query(db_table:str, in_dict:dict) -> str:
     query_str = 'INSERT INTO '
     query_str += db_table + '(site,DataDate,'
-    query_values_str = in_dict["site"] + ',"' + in_dict["DataDate"] + '",'
+    query_values_str = '"' + in_dict["site"] + '","' + in_dict["DataDate"] + '",'
     query_update_str = ''
     for key_name in in_dict:
         if key_name != "site" and key_name != "DataDate" and key_name != "error_status":
@@ -216,12 +218,14 @@ def retrieve_a_file(
                 mirror_subdir.mkdir(parents=True, exist_ok=True)
                 output_filepath_list.append(Path(f"{mirror_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vsec.sec"))
             duration=24 # duration of each segment, in hours
+            segment_end_str = "000"
         case '10':
             sampling_period_val='0.1'
             workdir_subdir = Path(f"{variometer_workdir}/{sampling_rate}_hz")
             Path(workdir_subdir).mkdir(parents=True, exist_ok=True)
             output_filepath_list = [Path(f"{workdir_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vdec.dec")]
             duration=4 # duration of each segment, in hours
+            segment_end_str = "999"
         case _:
             print("ERROR: Sampling rate not recognized")
             out_dict["error_status"] = "Invalid Sampling Rate"
@@ -239,22 +243,28 @@ def retrieve_a_file(
         end_hour = start_hour + duration - 1
         data_date_str = data_date.strftime('%Y-%m-%d')
         start_datetime_val=dt.datetime.strptime(data_date_str + "T" + str(start_hour) + ":00:00.000Z", '%Y-%m-%dT%H:%M:%S.%fZ')
-        end_datetime_val=dt.datetime.strptime(data_date_str + "T" + str(end_hour) + ":59:59.999Z", '%Y-%m-%dT%H:%M:%S.%fZ')
+        end_datetime_val=dt.datetime.strptime(data_date_str + "T" + str(end_hour) + ":59:59."+segment_end_str+"Z", '%Y-%m-%dT%H:%M:%S.%fZ')
 
         # use parameters to construct query, make request:
         url=construct_usgs_query(station_code=station_code,start_datetime=start_datetime_val,end_datetime=end_datetime_val,sampling_period=sampling_period_val)
         
         # Attempt to make url request: 
         http = urllib3.PoolManager(num_pools=10)
+        retries_settings=urllib3.Retry(
+            connect=0,
+            read=max_num_retries,
+            backoff_factor=0.5)
         try:
             url_response_bytes = http.request(
                 "GET", 
                 url, 
-                retries=max_num_retries,
+                retries=retries_settings,
                 decode_content=False,
                 preload_content=False,
                 redirect=False,
-                timeout=20)
+                timeout=30)
+            #url_response_bytes = http.request("GET",url,decode_content=False,preload_content=False)
+
         except urllib3.exceptions.TimeoutError:
             print("ERROR: Connection timed out! Aborting file retrieval... ---")
             out_dict["error_status"] = "Connection timed out"
@@ -270,7 +280,7 @@ def retrieve_a_file(
                 print("-> Segment "+ str(round((start_hour+duration)/duration)) + "/"+str(round(24/duration))+" retrieval complete. Elapsed %.0f seconds." % (dt.datetime.now() - segment_start_time_1file).seconds)
                 url_response_bytes_list.append(url_response_bytes)
             else:
-                print("ERROR! Invalid status returned: " + str(url_response_bytes.status) + "; Aborting file retrieval... ---")
+                print("ERROR! Invalid status returned: " + str(url_response_bytes.status) + " after %.0f seconds; Aborting file retrieval... ---" % (dt.datetime.now() - segment_start_time_1file).seconds)
                 out_dict["error_status"] = "Connection returned status: " + str(url_response_bytes.status)
                 return out_dict
     
@@ -282,12 +292,7 @@ def retrieve_a_file(
     with futures.ThreadPoolExecutor(round(24/duration)) as executor:
         url_response_string_list = executor.map(decode2string, url_response_bytes_list)
     url_response_string_list=list(url_response_string_list)
-
-    # we should be able to safely close the original url responses:
-    for url_response_bytes in url_response_bytes_list:
-        #http.releaseconn()
-        url_response_bytes.close()
-
+    
     # verify that the output strings aren't empty or contain timeout signatures. if they do, exit with error status
     verification_start_time=dt.datetime.now()
     print("Decoding complete. Elapsed %.0f seconds." % (verification_start_time - decoding_start_time).seconds)
@@ -385,7 +390,7 @@ def run_gmag_retrieve_usgs_variometer(
     
     # Get latest calibration date for each station in station list: 
     cal_check_start_time = dt.datetime.now()
-    print("--- Checking latest calibration dates... ---")
+    print("------ Checking latest calibration dates... ------")
     cal_date_dict = dict()
     for station_code in station_list:
         cal_date_dict[station_code] = get_usgs_variometer_cal_history(station_code)
@@ -398,7 +403,7 @@ def run_gmag_retrieve_usgs_variometer(
         current_date = date_batch[0]
         # Retrieve files for each station at this current date:
         for station_code in station_list:
-            print("--- Attempting to retrieve "+ station_code.upper() + " data for " + current_date.strftime('%Y-%m-%d') + " at sampling rate: " + sampling_rate + "Hz ---")
+            print("--- Attempting to retrieve "+ station_code.upper() + " data for " + current_date.strftime('%Y-%m-%d') + " at sampling rate: " + sampling_rate + " Hz ---")
             # Initialize dictionary containing results of attempted retrieval for given station and date:
             result_dict = {"LastAttemptedAccessTime":"","LastSuccessfulAccessTime":"","error_status":""}
             # If file is available, for given station and date, attempt to retrieve it:
@@ -420,7 +425,7 @@ def run_gmag_retrieve_usgs_variometer(
                 #of.write(sql_insert_update_query(db_table=db_table, in_dict=result_dict))
             if result_dict["error_status"] != "":
                 missing_file_list += "Station: " + station_code.upper() + ", Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-    print("--- Script complete. Elapsed %.0f seconds ---" % (dt.datetime.now() - main_start_time).seconds)
+    print("------ Script complete. Elapsed %.0f seconds ------" % (dt.datetime.now() - main_start_time).seconds)
     if missing_file_list != "":
         print("Retrieval was attempted for the following files, but failed for the following reasons: ")
         print(missing_file_list)

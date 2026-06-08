@@ -260,7 +260,8 @@ def json2iaga2002(str_json_segment:str) -> str:
     if len(json_data[0]["values"]) == len(json_data[1]["values"]) == len(json_data[2]["values"]):
         data_length = len(json_data[0]["values"])
     else: 
-        raise ValueError("ERROR: Components have differing number of elements!","Component arrays had differing length")
+        data_length = max(len(json_data[0]["values"]),len(json_data[1]["values"]),len(json_data[2]["values"]))
+        #raise ValueError("ERROR: Components have differing number of elements!","Component arrays had differing length")
         
     # initialize with start time:
     # format: 2025-11-17T00:00:00.069Z
@@ -276,12 +277,13 @@ def json2iaga2002(str_json_segment:str) -> str:
         # DOY
         iaga_data_row_str += row_datetime.strftime('%j').ljust(8)
         # component 1:
-        if "NoneType" in [
-            type(json_data[0]["values"][i]).__name__,
-            type(json_data[1]["values"][i]).__name__,
-            type(json_data[2]["values"][i]).__name__]: raise ValueError("ERROR: JSON is missing data!","Segment was missing data.")
         for j in range(3):
-            iaga_data_row_str += ("%.2f" % json_data[j]["values"][i]).ljust(10)
+            try:
+                if type(json_data[j]["values"][i]).__name__ == "NoneType": 
+                    raise ValueError("ERROR: JSON is missing data!","Segment was missing data.")
+                iaga_data_row_str += ("%.2f" % json_data[j]["values"][i]).ljust(10)
+            except IndexError:
+                iaga_data_row_str += ("%.2f" % NINES).ljust(10)
         # component nul:
         iaga_data_row_str += ("%.2f" % NINES).ljust(7)
         
@@ -301,10 +303,11 @@ def decode2string(bytes_response):
     take in a urllib3 response object as bytes and decode to utf-8 function is separate from others so concurrent module can run decode calls in parallel
     '''
     try:
-        bytes_response_read = bytes_response.read()
+        #bytes_response_read = bytes_response.read()
         # we should be able to safely close the original url responses:
+        #bytes_response.close()
+        string_response=bytes_response.data.decode('utf-8') #bytes_response_read.decode('utf-8')
         bytes_response.close()
-        string_response=bytes_response_read.decode('utf-8')
         if string_response == '': 
             raise ValueError(
                 "ERROR! Decoded bytes_response is empty!",
@@ -367,7 +370,7 @@ def correct_start_time(
                 print("WARNING: Possible component array mismatch detected; modifying query to attempt correction.")
                 modified_start_time = correct_start_time(
                     station_code=station_code,
-                    start_datetime=start_datetime - dt.timedelta(milliseconds=1),
+                    start_datetime=start_datetime - dt.timedelta(milliseconds=99),
                     sampling_period=sampling_period,
                     recursive_run=True)
                 return modified_start_time
@@ -381,39 +384,81 @@ def retrieve_file_bytes(
         start_datetime:dt.datetime,
         end_datetime:dt.datetime,
         sampling_period:str,
-        max_num_retries:int):
-    # use parameters to construct query, make request:
-    if sampling_period == "0.1":
-        start_datetime = correct_start_time(
+        max_num_retries:int,
+        correct_time=True) -> urllib3.response.BaseHTTPResponse:
+    try:
+        # use parameters to construct query, make request:
+        #if sampling_period == "0.1" and correct_time:
+        #    corrected_time_start = dt.datetime.now()
+        #    start_datetime = correct_start_time(
+        #        station_code=station_code,
+        #        start_datetime=start_datetime,
+        #        sampling_period=sampling_period)
+        url=construct_usgs_query(
             station_code=station_code,
             start_datetime=start_datetime,
+            end_datetime=end_datetime,
             sampling_period=sampling_period)
-    url=construct_usgs_query(
-        station_code=station_code,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        sampling_period=sampling_period)
-    # Attempt to make url request: 
-    http = urllib3.PoolManager(num_pools=24) # num_pools=10
-    retries_settings=urllib3.Retry(
-        connect=0,
-        read=max_num_retries,
-        backoff_factor=0.5)
-    url_response_bytes = http.request(
-        "GET", 
-        url, 
-        retries=retries_settings,
-        decode_content=False,
-        preload_content=False,
-        redirect=False,
-        timeout=30)
-    match url_response_bytes.status:
-        case 200:
-            return url_response_bytes
-        case _:
-            raise ValueError(
-                "ERROR: Invalid status returned: " + str(url_response_bytes.status) + ".",
-                "Bad response status code: " + str(url_response_bytes.status)) 
+        # Attempt to make url request: 
+        http = urllib3.PoolManager(num_pools=24) # num_pools=10
+        retries_settings=urllib3.Retry(
+            connect=0,
+            read=max_num_retries,
+            backoff_factor=0.5)
+        url_response_bytes = http.request(
+            "GET", 
+            url, 
+            retries=retries_settings,
+            decode_content=False,
+            preload_content=False,
+            redirect=False,
+            timeout=30)
+        match url_response_bytes.status:
+            case 200:
+                if b"HTTP/1.1 408 Request Timeout" in url_response_bytes.data:
+                    if max_num_retries > 0:
+                        print("Request timeout detected within response data. Attempting again")
+                        url_response_bytes_retry = retrieve_file_bytes(
+                            station_code=station_code,
+                            start_datetime=start_datetime,
+                            end_datetime=end_datetime,
+                            sampling_period=sampling_period,
+                            max_num_retries=max_num_retries-1,
+                            correct_time=False)
+                        return url_response_bytes_retry
+                    else:
+                        raise ValueError(
+                            "ERROR! Incomplete file due to timed out connection!",
+                            "Connection timed out during retrieval")
+                elif len(url_response_bytes.data) == 0:
+                    if max_num_retries > 0:
+                        print("Request returned empty; Attempting again...")
+                        url_response_bytes_retry = retrieve_file_bytes(
+                            station_code=station_code,
+                            start_datetime=start_datetime,
+                            end_datetime=end_datetime,
+                            sampling_period=sampling_period,
+                            max_num_retries=max_num_retries-1,
+                            correct_time=False)
+                        return url_response_bytes_retry
+                    else:
+                        raise ValueError(
+                            "ERROR! Decoded bytes_response is empty!",
+                            "Empty response")
+                else:
+                    return url_response_bytes
+            case _:
+                raise ValueError(
+                    "ERROR: Invalid status returned: " + str(url_response_bytes.status) + ".",
+                    "Bad response status code: " + str(url_response_bytes.status)) 
+    except urllib3.exceptions.TimeoutError:
+        raise ValueError(
+            "ERROR: Connection timed out!",
+            "Connection timed out during retrieval")
+    except urllib3.exceptions.MaxRetryError:
+        raise ValueError(
+            "ERROR: Connection could not be established after " + str(max_num_retries + 1) + " attempt(s)",
+            "Max connection retry limit reached")
 
 def retrieve_a_file(
         station_code:str,
@@ -435,38 +480,42 @@ def retrieve_a_file(
                     mirror_subdir = Path(f"{mirror_dir}/{station_code.lower()}/1_hz/{data_date.strftime('%Y')}/{data_date.strftime('%m')}")
                     mirror_subdir.mkdir(parents=True, exist_ok=True)
                     output_filepath_list.append(Path(f"{mirror_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vsec.sec"))
-                duration=12 # duration of each segment, in hours # formerly 24
-                segment_end_str = "000"
+                duration=6 # duration of each segment, in hours # formerly 24
+                #segment_end_str = "000"
+                sampling_rate_td = dt.timedelta(seconds=1)
             case '10':
                 sampling_period_val='0.1'
                 workdir_subdir = Path(f"{variometer_workdir}/{sampling_rate}_hz")
                 Path(workdir_subdir).mkdir(parents=True, exist_ok=True)
                 output_filepath_list = [Path(f"{workdir_subdir}/{station_code.lower()}{data_date.strftime('%Y%m%d')}vdec.dec")]
-                duration=3 # duration of each segment, in hours # formerly 4
-                segment_end_str = "999"
+                duration=1 # duration of each segment, in hours # formerly 4
+                #segment_end_str = "000" # was 999
+                sampling_rate_td = dt.timedelta(milliseconds=100)
             case _:
                 raise ValueError("ERROR: Sampling rate not recognized","Invalid Sampling Rate")
+        
         print("Retrieving " + station_code.upper() + " data for "+ data_date.strftime('%Y-%m-%d') +" in " + str(round(24/duration)) + " segments... ")
         start_time_1file = dt.datetime.now()
         out_dict["LastAttemptedAccessTime"] = dt.datetime.strftime(start_time_1file,'%Y-%m-%d %H:%M:%S')
 
         # make requests to USGS server and collect response objects in a list: 
         url_response_bytes_list = []
-        # start hour increases by length of duration
+        date_start_dt = dt.datetime.strptime(data_date.strftime('%Y-%m-%d') + "T" + "00:00:00.000Z", '%Y-%m-%dT%H:%M:%S.%fZ')
         for start_hour in range(0, 24, duration):
             segment_start_time_1file = dt.datetime.now()
-            # end time will be 0.001 second before next segment start time:
-            end_hour = start_hour + duration - 1
-            data_date_str = data_date.strftime('%Y-%m-%d')
-            start_datetime_val=dt.datetime.strptime(data_date_str + "T" + str(start_hour) + ":00:00.000Z", '%Y-%m-%dT%H:%M:%S.%fZ')
-            end_datetime_val=dt.datetime.strptime(data_date_str + "T" + str(end_hour) + ":59:59."+segment_end_str+"Z", '%Y-%m-%dT%H:%M:%S.%fZ')
+            segment_name_str = str(round((start_hour+duration)/duration)) + "/"+str(round(24/duration))
+            #print("-> Retrieving segment "+ str(round((start_hour+duration)/duration)) + "/"+str(round(24/duration))+"...")
+            # start hour increases by length of duration
+            segment_start_dt = date_start_dt + dt.timedelta(hours = start_hour)
+            # end time is one segment duration after start time, but subtract sampling rate so times do not overlap:
+            segment_end_dt = segment_start_dt + dt.timedelta(hours = duration) - sampling_rate_td
             url_response_bytes = retrieve_file_bytes(
                 station_code=station_code,
-                start_datetime=start_datetime_val,
-                end_datetime=end_datetime_val,
+                start_datetime=segment_start_dt,
+                end_datetime=segment_end_dt,
                 sampling_period=sampling_period_val,
                 max_num_retries=max_num_retries)
-            print("-> Segment "+ str(round((start_hour+duration)/duration)) + "/"+str(round(24/duration))+" retrieval complete. Elapsed %.0f seconds." % (dt.datetime.now() - segment_start_time_1file).seconds)
+            print("-> Retrieval of segment "+ segment_name_str +" complete. Elapsed %.0f seconds." % (dt.datetime.now() - segment_start_time_1file).seconds)
             url_response_bytes_list.append(url_response_bytes)
         # Take list of byte responses and decode:
         decoding_start_time = dt.datetime.now()
@@ -497,21 +546,12 @@ def retrieve_a_file(
         end_time_1file = dt.datetime.now()
         print("File writing complete. Elapsed %.0f seconds." % (end_time_1file - writing_start_time).seconds)
         print("Total file retrieval complete. Elapsed time: %.0f seconds." % (end_time_1file - start_time_1file).seconds)
-    except urllib3.exceptions.TimeoutError:
-        raise ValueError(
-            "ERROR: Connection timed out!",
-            "Connection timed out during retrieval")
-    except urllib3.exceptions.MaxRetryError:
-        raise ValueError(
-            "ERROR: Connection could not be established after " + str(max_num_retries + 1) + " attempt(s)",
-            "Max connection retry limit reached")
-    
     except ValueError as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
         out_dict["error_status"] = error.args[1]
-    except:
-        print("ERROR! The output file could not be written.")
-        out_dict["error_status"] = "Failed to write data to output file."
+    #except:
+    #    print("ERROR! The output file could not be written.")
+    #    out_dict["error_status"] = "Failed to write data to output file."
     return out_dict
 
 def run_gmag_retrieve_usgs_variometer(

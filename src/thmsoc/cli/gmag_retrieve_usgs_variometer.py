@@ -63,10 +63,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2025-11-17","-d","3","-c","anmo","s61a","-f","10","-r","2"]
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2025-11-17","-d","3","-c","anmo","s61a","-f","1","-r","2"]
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-03-03","-d","3","-c","bouv","-f","1","-r","2"]
     sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-06-01","-d","1","-f","1","-r","2"]
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-06-01","-d","1","-f","10","-r","2"]
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-06-01","-d","1","-c","X48A","-f","10","-r","2"]
     raise SystemExit(main())

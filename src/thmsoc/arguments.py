@@ -42,7 +42,7 @@ valid_gmag_usgs_variometer_station_vals = [
     'sfjd','spmn','sspa','s61a','t47a','u38b','wci' ,'whtx','wvt' ,'352a',
     'k62a','n51a','n53a','bouv','s39b','t57a','x48a','y49a','154a','456a',
     'midw']
-valid_gmag_usgs_variometer_station_args = valid_gmag_usgs_variometer_station_vals
+valid_gmag_usgs_variometer_station_args = valid_gmag_usgs_variometer_station_vals.copy()
 valid_gmag_usgs_variometer_station_args.append('all')
 
 def add_probe_arguments(p:argparse.ArgumentParser) -> None:
@@ -72,11 +72,16 @@ def expand_l2_arguments(args:argparse.Namespace) -> list[str]:
     else:
         return args.l2_types
 
+#class toLower(argparse.Action):
+#    def __call__(self, parser, namespace, values, option_string=None):
+#        lowercase_values = [v.lower() for v in values]
+#        setattr(namespace, self.dest, lowercase_values)
+
 def add_station_arguments(p:argparse.ArgumentParser) -> None:
-    p.add_argument("-c", "--station_codes", help="Stations to process, as THEMIS station code alias", nargs='*', choices=valid_gmag_usgs_variometer_station_args)
+    p.add_argument("-c", "--station_codes", help="Stations to process, as THEMIS station code alias", nargs='*', choices=valid_gmag_usgs_variometer_station_args, type=str.lower, default=['all'])
 
 def expand_station_arguments(args:argparse.Namespace) -> list[str]:
     if 'all' in args.station_codes:
-        return valid_gmag_usgs_variometer_station_args
+        return valid_gmag_usgs_variometer_station_vals
     else:
         return args.station_codes

@@ -3,7 +3,7 @@
 import argparse
 from thmsoc.gmag_retrieve_usgs_variometer import run_gmag_retrieve_usgs_variometer
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
-from thmsoc.arguments import add_station_arguments
+from thmsoc.arguments import add_station_arguments, expand_station_arguments
 
 def main() -> int:
     # Initialize argument parser
@@ -42,10 +42,14 @@ def main() -> int:
     # Check arguments
     check_trange_arguments(args)
 
+    # Expand station codes:
+    station_codes = expand_station_arguments(args)
+    
+
     exit_status = 0
     # Run the variometer retrieval script:
     exit_status = run_gmag_retrieve_usgs_variometer(
-        station_list=args.station_codes,
+        station_list=station_codes,
         start_date=args.start_date,
         end_date=args.end_date,
         days=args.days,
@@ -59,6 +63,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
-    #sys.argv=["gmag_retrieve_usgs_variometer","-s","2025-11-17","-d","3","-c","anmo","s61a","-f","10","-r","2"]
-    sys.argv=["gmag_retrieve_usgs_variometer","-s","2025-11-17","-d","3","-c","anmo","s61a","-f","1","-r","2"]
+    sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-06-01","-d","1","-f","1","-r","2"]
     raise SystemExit(main())

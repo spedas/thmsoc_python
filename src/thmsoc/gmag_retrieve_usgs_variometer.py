@@ -564,6 +564,11 @@ def run_gmag_retrieve_usgs_variometer(
         db_update_fp_str:str="", 
         sampling_rate:str = '1', 
         max_num_retries:int=0) -> int:
+    
+    import sys
+    # Set line buffering to avoid long pauses when viewing output with 'tail'
+    sys.stdout.reconfigure(line_buffering=True)
+    
     main_start_time = dt.datetime.now()
     str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
 
@@ -632,16 +637,16 @@ def run_gmag_retrieve_usgs_variometer(
                     mirror_dir=variometer_mirrordir,
                     sampling_rate=sampling_rate,
                     max_num_retries=max_num_retries)
-            result_dict["site"] = station_code
-            result_dict["DataDate"] = current_date.strftime('%Y-%m-%d')
-            if result_dict["LastSuccessfulAccessTime"] != "":
-                result_dict["CalibrationTime"] = cal_date_dict[station_code]
-            # Take result dictionary, create sql insert update query from it, and append query line to sql query file:
-            with open(fp_db_update, "a") as of:
-                print(sql_insert_update_query(db_table=db_table, in_dict=result_dict), file=of)
-                #of.write(sql_insert_update_query(db_table=db_table, in_dict=result_dict))
-            if result_dict["error_status"] != "":
-                missing_file_list += "Station: " + (station_code.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
+                result_dict["site"] = station_code
+                result_dict["DataDate"] = current_date.strftime('%Y-%m-%d')
+                if result_dict["LastSuccessfulAccessTime"] != "":
+                    result_dict["CalibrationTime"] = cal_date_dict[station_code]
+                # Take result dictionary, create sql insert update query from it, and append query line to sql query file:
+                with open(fp_db_update, "a") as of:
+                    print(sql_insert_update_query(db_table=db_table, in_dict=result_dict), file=of)
+                    #of.write(sql_insert_update_query(db_table=db_table, in_dict=result_dict))
+                if result_dict["error_status"] != "":
+                    missing_file_list += "Station: " + (station_code.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
     print("------ Script complete. Elapsed %.0f seconds ------" % (dt.datetime.now() - main_start_time).seconds)
     if missing_file_list != "":
         print("Retrieval was attempted for the following files, but failed for the following reasons: ")

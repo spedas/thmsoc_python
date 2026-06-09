@@ -72,11 +72,6 @@ def expand_l2_arguments(args:argparse.Namespace) -> list[str]:
     else:
         return args.l2_types
 
-#class toLower(argparse.Action):
-#    def __call__(self, parser, namespace, values, option_string=None):
-#        lowercase_values = [v.lower() for v in values]
-#        setattr(namespace, self.dest, lowercase_values)
-
 def add_station_arguments(p:argparse.ArgumentParser) -> None:
     p.add_argument("-c", "--station_codes", help="Stations to process, as THEMIS station code alias", nargs='*', choices=valid_gmag_usgs_variometer_station_args, type=str.lower, default=['all'])
 

@@ -45,7 +45,6 @@ def main() -> int:
     # Expand station codes:
     station_codes = expand_station_arguments(args)
     
-
     exit_status = 0
     # Run the variometer retrieval script:
     exit_status = run_gmag_retrieve_usgs_variometer(

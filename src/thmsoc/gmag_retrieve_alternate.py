@@ -5,85 +5,55 @@ retrieves GMAG data from alternate sources to supplement AE index calculation
 """
 import datetime as dt
 from thmsoc.url_construct_web_query import url_construct_web_query
+from thmsoc.url_retrieve_file_bytes import retrieve_file_from_url
 from pathlib import Path
 import tomli
-import obspy
 import numpy as np
+from obspy.clients.fdsn import Client
+from obspy import UTCDateTime
 
-def miniseedtxt2iaga2002(comp_list:list=[]):
-    """
-    Create iaga2002 formatted text file from miniseed component file(s), currently assumed to be GMAG B field vector variation measurements
-    """
-    return
 
-def retrieve_miniseed(scode:str,date:dt.datetime,proc_dir:Path=Path(""),obspy_select_kwargs:dict={},out_format:str="iaga2002"):
-    start_datetime_str = date.strftime('%Y-%m-%dT00:00:00Z')
-    end_datetime_str = (date + dt.timedelta(days = 1)).strftime('%Y-%m-%dT00:00:00Z')
-
-    url = url_construct_web_query(
-        web_scheme='http',
-        web_netloc='www.earthquakescanada.nrcan.gc.ca',
-        web_path='/fdsnws/dataselect/1/query/',
-        query_list=[
-            ('station',scode),
-            ('starttime',start_datetime_str),
-            ('endtime',end_datetime_str)
-        ],
-        query_separator='&',
-        web_fragment='')
-    
-    # Download miniseed data file to working directory
-    fn = Path(f"{proc_dir}/{scode.upper()}{date.strftime('%Y%m%d')}.mseed")
-    # read miniseed file using obspy:
-
-    st = obspy.read(str(fn))
-
-    f_raw_list = []
-    if type(obspy_select_kwargs.get("channel")) == list:
-        for cha in obspy_select_kwargs["channel"]:
-            f_raw = Path(f"{proc_dir}/{scode.upper()}{date.strftime('%Y%m%d')}_{cha}.txt")
-            tmp = st.select(
-                channel=cha,
-                **{x: obspy_select_kwargs[x] for x in obspy_select_kwargs if x != "channel"}
-                ) 
-            tmp.merge(fill_value=np.nan)
-            tmp.write(str(f_raw),format = "TSPAIR")
-            f_raw_list.append(f_raw)
-    else:
-        f_raw = Path(f"{proc_dir}/{scode.upper()}{date.strftime('%Y%m%d')}.txt")
-        tmp = st.select(**obspy_select_kwargs) 
-        tmp.merge(fill_value=np.nan)
-        tmp.write(str(f_raw),format = "TSPAIR")
-        f_raw_list.append(f_raw)
-
-    # for each file name in f_raw_list, parse text file
-
-    match out_format:
-        case "iaga2002":
-            miniseedtxt2iaga2002(comp_list=f_raw_list)
-    return
 
 def retrieve_alt_file(scode:str, date:dt.datetime, tmp_root:Path=Path("")):
     # determine which retrieval method to use from the station code
     # TODO: this could use pyspedas gmag to get the gmag metadata to find group name
     group_str = ""
-    scode_alias = ""
+    waveform_kwargs={}
     if scode.lower()=="snkq":
         group_str = "nrcan"
-        scode_alias = "SNK"
-        obspy_select_kwargs = {
+        waveform_kwargs = {
+            "station":"SNK",
             "network":'C2',
             "location":'R1',
-            "channel":['UFX','UFY','UFZ','UFF']
+            "channel":'UFX,UFY,UFZ,UFF'
         }
 
     proc_dir = Path(f"{tmp_root}/retrieve_alternate/{group_str}")
     proc_dir.mkdir(parents=True, exist_ok=True)
 
+    filenames = []
     match group_str:
         case "nrcan":
+            client = Client(group_str.upper())
+            st = client.get_waveforms(
+                attach_response=True,
+                **waveform_kwargs,
+                starttime=UTCDateTime(date.strftime('%Y-%m-%dT00:00:00.000')), 
+                endtime=UTCDateTime((date + dt.timedelta(days = 1)).strftime('%Y-%m-%dT00:00:00.000')))
+            
+            channel_list = [substring.strip() for substring in waveform_kwargs["channel"].split(",")]
+            
+            f_raw_list = []
+            for cha in channel_list:
+                f_raw = Path(f"{proc_dir}/{scode.upper()}{date.strftime('%Y%m%d')}_{cha}.txt")
+                tmp = st.select(channel=cha,**{x: waveform_kwargs[x] for x in waveform_kwargs if x != "channel"}) 
+                tmp.merge(fill_value=np.nan)
+                tmp.write(str(f_raw),format = "TSPAIR")
+                f_raw_list.append(f_raw)
 
-            retrieve_miniseed(scode_alias,date,proc_dir=proc_dir,cha_list=cha_list,obspy_select_kwargs)
+            # for each file name in f_raw_list, parse text file into iaga2002 format
+            
+
     return
 
 def run_gmag_retrieve_alternate(scode:str, date:str | dt.datetime | list[str | dt.datetime]):
@@ -108,7 +78,7 @@ def run_gmag_retrieve_alternate(scode:str, date:str | dt.datetime | list[str | d
     
     for date_current in date_list:
         retrieve_alt_file(scode=scode, date=date_current, tmp_root=TEMPROOT)
-    
+        
     return
 
 if __name__ == "__main__":

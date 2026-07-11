@@ -4,13 +4,12 @@ gmag_retrieve_alternate
 retrieves GMAG data from alternate sources to supplement AE index calculation
 """
 import datetime as dt
-from thmsoc.url_construct_web_query import url_construct_web_query
-from thmsoc.url_retrieve_file_bytes import retrieve_file_from_url
+from thmsoc.url_retrieve_file import url_retrieve_file
 from pathlib import Path
 import tomli
-import numpy as np
 from obspy.clients.fdsn import Client
 from obspy import UTCDateTime
+from thmsoc import simple_daterange
 
 def midcenlon_to_tenthsmineast(midcenlon_deg):
     if midcenlon_deg < 0:
@@ -21,36 +20,39 @@ def midcenlon_to_tenthsmineast(midcenlon_deg):
     tenthsmineast = frac_turn * 21600 * 10
     return tenthsmineast
 
-def retrieve_alt_file(scode:str, date:dt.datetime, tmp_root:Path=Path("")):
+def retrieve_alt_file(scode:str, date:dt.date, tmp_root:Path=Path("")):
     # determine which retrieval method to use from the station code
     # TODO: this could use pyspedas gmag to get the gmag metadata to find group name
     group_str = ""
     waveform_kwargs={}
     header_vals={}
     decbas_deg = 0.0
-    if scode.lower()=="snkq":
-        group_str = "nrcan"
-        waveform_kwargs = {
-            "station":"SNK",
-            "network":'C2',
-            "location":'R1',
-            "channel":'UFX,UFY,UFZ,UFF'
-        }
-        header_vals = {
-            "Source of Data":"Natural Resources Canada (NRCAN)",
-            "Station Name":"Sanikiluaq",
-            "IAGA CODE":"SNKQ",
-            "Geodetic Latitude":"56.5", # can update from GMAG dict
-            "Geodetic Longitude":"280.8",
-            "Elevation":"",
-            "Reported":"XYZF",
-            "Sensor Orientation":"XYZ",
-            "Digital Sampling":"0.5 second",
-            "Data Interval Type":"1-minute",
-            "Data Type":"variation"
-        }
-        decbas_deg = -14.9
 
+    match scode.lower():
+        case "snkq":
+            group_str = "nrcan"
+            waveform_kwargs = {
+                "station":"SNK",
+                "network":'C2',
+                "location":'R1',
+                "channel":'UFX,UFY,UFZ,UFF'
+            }
+            header_vals = {
+                "Source of Data":"Natural Resources Canada (NRCAN)",
+                "Station Name":"Sanikiluaq",
+                "IAGA CODE":"SNKQ",
+                "Geodetic Latitude":"56.5", # can update from GMAG dict
+                "Geodetic Longitude":"280.8",
+                "Elevation":"",
+                "Reported":"XYZF",
+                "Sensor Orientation":"XYZ",
+                "Digital Sampling":"0.5 second",
+                "Data Interval Type":"1-minute",
+                "Data Type":"variation"
+            }
+            decbas_deg = -14.9
+        case "lrv":
+            group_str = "lrv"
 
     proc_dir = Path(f"{tmp_root}/retrieve_alternate/{group_str}")
     proc_dir.mkdir(parents=True, exist_ok=True)
@@ -143,34 +145,69 @@ def retrieve_alt_file(scode:str, date:dt.datetime, tmp_root:Path=Path("")):
             
             with open(output_filepath, "a") as of:
                     of.write(iaga_str)
+
+        case "lrv":
+            fn = "".join([
+                "lrv",
+                f"{date.year}"[-2:],
+                f"{date.strftime("%b")}".lower(),
+                ".min"
+            ])        
+            url = f"http://cygnus.rhi.hi.is/~halo/UCLA/{date.year}/{fn}"
+            # URL contains ascii text which we can write to file.
+            output_filepath = Path(f"{proc_dir}/{fn}")
+            bytes_response = url_retrieve_file(
+                url,
+                out_filename=output_filepath,
+                format="bytes")
+            string_response=bytes_response.data.decode('utf-8')
+
+            output_filepath.unlink(missing_ok=True)
+            output_file = open(output_filepath, "x")
+            output_file.close()
             
-            print("done")
+            with open(output_filepath, "a") as of:
+                    of.write(string_response)
     return
 
-def run_gmag_retrieve_alternate(scode:str, date:str | dt.datetime | list[str | dt.datetime]):
+def run_gmag_retrieve_alternate(
+        station_code:str | list[str], 
+        start_date: str, 
+        end_date: str):
+    
     thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
     thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
     try:
         with open(thmsoc_python_config, "rb") as f:
             toml_dict = tomli.load(f)
-            OUTDATAROOT = Path(toml_dict["paths"]["output_dataroot"])
             TEMPROOT = Path(toml_dict["paths"]["temproot"])
     except FileNotFoundError:
-        OUTDATAROOT = Path("/disks/themisdata")
         TEMPROOT = Path("/mydisks/home/thmsoc/thmsoc_python")
     
-    date_list = [dt.datetime.now()]
-    if type(date) == dt.datetime:
-        date_list = [date]
-    elif type(date) == str:
-        date_list = [dt.datetime.strptime(date,'%Y-%m-%d')]
-    elif type(date) == list[str]:
-        date_list = [dt.datetime.strptime(date_str,'%Y-%m-%d') for date_str in date]
+    if type(station_code) == str:
+        scodes = [station_code]
+    else:
+        scodes = station_code
     
-    for date_current in date_list:
-        retrieve_alt_file(scode=scode, date=date_current, tmp_root=TEMPROOT)
-        
+    dt_start_date = dt.datetime.strptime(start_date,'%Y-%m-%d')
+    dt_end_date = dt.datetime.strptime(end_date,'%Y-%m-%d')
+    
+    for scode in scodes:
+        match scode:
+            case "lrv":
+                # use monthly mode:
+                dates_monthly_unsorted = []
+                for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
+                    dates_monthly_unsorted.append(dt.datetime.strptime(current_date.strftime("%Y-%m-01"),"%Y-%m-%d"))
+                dates_monthly = sorted(set(dates_monthly_unsorted))
+                #dates_monthly = sorted(set([dt.datetime.strptime(x.strftime("%Y-%m-01"),"%Y-%m-%d") for x in dates_daily]))
+                for current_date in dates_monthly:
+                    retrieve_alt_file(scode=scode, date=current_date, tmp_root=TEMPROOT)
+            case _:
+                # use daily mode:    
+                for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
+                    retrieve_alt_file(scode=scode, date=current_date, tmp_root=TEMPROOT)
     return
 
 if __name__ == "__main__":
-    run_gmag_retrieve_alternate(scode="snkq",date="2026-01-20")
+    run_gmag_retrieve_alternate(station_code=["snkq","lrv"],start_date="2026-01-19",end_date="2026-01-21")

@@ -73,14 +73,14 @@ def retrieve_file_bytes(
             "ERROR: Connection could not be established after " + str(max_num_retries + 1) + " attempt(s)",
             "Max connection retry limit reached")
 
-def retrieve_file_from_url(url,out_filename:Path | None = None,format:str | None=None,**retrieve_file_bytes_kwargs):
+def url_retrieve_file(url,out_filename:Path | None = None,format:str | None=None,**retrieve_file_bytes_kwargs):
     """
     Retrieve contents of URL in specified format. If out_filename path is provided, write contents of URL to file.
     """
     url_response = ""
     match format:
         case "bytes":
-            url_response = retrieve_file_bytes(**retrieve_file_bytes_kwargs)
+            url_response = retrieve_file_bytes(url,**retrieve_file_bytes_kwargs)
         case _:
             if out_filename is not None:
                 url_response = (urlretrieve(url,str(out_filename)))[1]
@@ -90,9 +90,10 @@ def retrieve_file_from_url(url,out_filename:Path | None = None,format:str | None
 
 if __name__ == "__main__":
     bytes_response = retrieve_file_bytes(
-        url=("https://geomag.usgs.gov/ws/algorithms/filter/?"
-        "elements=X&elements=Y&elements=Z&format=iaga2002&id=J47A&type=variation"
-        "&starttime=2026-06-29T00:00:00.000Z&endtime=2026-06-29T03:00:00.000Z"
-        "&output_sampling_period=0.1"),
+        url=(
+            "https://geomag.usgs.gov/ws/algorithms/filter/?"
+            "elements=X&elements=Y&elements=Z&format=iaga2002&id=J47A&type=variation"
+            "&starttime=2026-06-29T00:00:00.000Z&endtime=2026-06-29T03:00:00.000Z"
+            "&output_sampling_period=0.1"),
         max_num_retries=0,
         timeout_content=b"HTTP/1.1 408 Request Timeout") # timeout=3

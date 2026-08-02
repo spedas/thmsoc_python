@@ -80,6 +80,15 @@ to make sure your venv and local config are fully updated.
 
 So far, we have:
 
+ip_owner_report: Group IPv4 request addresses from standard input by registered organization and current origin ASN. Duplicate addresses are counted as separate requests. Results are tab-separated and sorted by descending request count. External lookup results are cached between runs.
+
+```
+usage: ip_owner_report [-h] [--cache CACHE] [--refresh] [--timeout TIMEOUT]
+                       [--strict-lookups] [--ca-bundle CA_BUNDLE]
+```
+
+For example: `ip_owner_report < addresses.txt > report.tsv`
+
 product_volume:  Create a report of data volume in various categories over a time range.
 
 ```
@@ -169,7 +178,6 @@ and duration, or an end date and duration.  The end date is included in the proc
   -p [{a,b,c,d,e,all} ...], --probes [{a,b,c,d,e,all} ...]
                         Probes to process
 ```
-
 
 
 

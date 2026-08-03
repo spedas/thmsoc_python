@@ -19,8 +19,6 @@ Running the .venv/bin activation script ensures that all the defined scripts wil
 thmsoc_python is installed on the lab machines under /disks/socware/thmsoc_dp_current/thmsoc_python .
 It's a git working copy and editable installation, owned by the thmsw user (just like the production IDL code, ksh scripts, etc.)
 It has a dedicated Python virtual environment (currently set up with python 3.12) in thmsoc_python/.venv . 
-The installation was done on one of our RHEL servers, so the tools may not work on ambrosia until that
-machine is upgraded to RHEL.
 
 
 ## Development and testing installations
@@ -60,7 +58,12 @@ Finally, open a PyCharm terminal window and do `uv pip install -e .` to make the
 ## Updating the production installation
 
 After testing any local changes you want to make, push them out to the Github repo.
-Then log into the 'thmsw' account on a RHEL machine (not ambrosia, unti it gets updated).
+Then, log into the 'thmsw' account on ambrosia.  
+
+Note: The following commands may not work on other machines
+until the sysadmins resolve an NFS locking issue between ambrosia and the other THEMIS servers.  thmsoc_python can
+still be used anywhere, including ambrosia, which is now upgraded to RHEL like the rest of our hosts.
+
 Activate the thmsoc_python venv:
 
 `source /disks/socware/thmsoc_dp_current/thmsoc_python/.venv/bin/activate.csh`

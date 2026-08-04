@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import socket
 import ssl
 import sys
 import tempfile
@@ -13,8 +14,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Iterable, TextIO
+from typing import Any, Callable, Iterable, TextIO
 
 IANA_BOOTSTRAP = "https://data.iana.org/rdap/ipv4.json"
 RIPESTAT_NETWORK_INFO = "https://stat.ripe.net/data/network-info/data.json"
@@ -33,40 +36,130 @@ def make_tls_context(ca_bundle: Path | None = None) -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
-def get_json(url: str, timeout: float, context: ssl.SSLContext) -> dict[str, Any]:
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/rdap+json, application/json", "User-Agent": USER_AGENT},
-    )
-    for attempt in range(3):
+def retry_delay(error: urllib.error.HTTPError, attempt: int) -> float:
+    """Return a server-requested delay, or exponential backoff if absent."""
+    retry_after = error.headers.get("Retry-After") if error.headers else None
+    if retry_after:
         try:
-            with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
-                return json.load(response)
-        except (OSError, json.JSONDecodeError) as exc:
-            retryable = not isinstance(exc, urllib.error.HTTPError) or exc.code == 429 or exc.code >= 500
-            if attempt == 2 or not retryable:
-                raise LookupError(f"lookup failed for {url}: {exc}") from exc
-            delay = 2.0**attempt
-            if isinstance(exc, urllib.error.HTTPError) and exc.headers:
-                try:
-                    delay = min(30.0, float(exc.headers.get("Retry-After", delay)))
-                except ValueError:
-                    pass
-            time.sleep(delay)
-    raise AssertionError("unreachable")
+            return max(0.0, float(retry_after))
+        except ValueError:
+            try:
+                retry_at = parsedate_to_datetime(retry_after)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return min(60.0, 2.0**attempt)
 
 
-def read_addresses(lines: Iterable[str]) -> Counter[ipaddress.IPv4Address]:
-    """Read, validate, and count IPv4 addresses, ignoring blank lines."""
+class HttpClient:
+    """JSON HTTP client with per-host pacing and rate-limit-aware retries."""
+
+    def __init__(self, timeout: float, context: ssl.SSLContext, retries: int = 8,
+                 request_delay: float = 0.25) -> None:
+        self.timeout = timeout
+        self.context = context
+        self.retries = retries
+        self.request_delay = request_delay
+        self.next_request: dict[str, float] = {}
+
+    def get_json(self, url: str) -> dict[str, Any]:
+        host = urllib.parse.urlsplit(url).netloc
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/rdap+json, application/json",
+                     "User-Agent": USER_AGENT},
+        )
+        for attempt in range(self.retries + 1):
+            wait = self.next_request.get(host, 0.0) - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self.next_request[host] = time.monotonic() + self.request_delay
+            try:
+                with urllib.request.urlopen(
+                    request, timeout=self.timeout, context=self.context
+                ) as response:
+                    return json.load(response)
+            except urllib.error.HTTPError as exc:
+                retryable = exc.code == 429 or exc.code >= 500
+                if attempt == self.retries or not retryable:
+                    raise LookupError(f"lookup failed for {url}: {exc}") from exc
+                delay = retry_delay(exc, attempt)
+                self.next_request[host] = max(
+                    self.next_request.get(host, 0.0), time.monotonic() + delay
+                )
+                print(
+                    f"warning: {host} returned HTTP {exc.code}; retrying in "
+                    f"{delay:.1f} seconds ({attempt + 1}/{self.retries})",
+                    file=sys.stderr,
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                if attempt == self.retries:
+                    raise LookupError(f"lookup failed for {url}: {exc}") from exc
+                delay = min(60.0, 2.0**attempt)
+                self.next_request[host] = max(
+                    self.next_request.get(host, 0.0), time.monotonic() + delay
+                )
+        raise AssertionError("unreachable")
+
+
+def system_resolver(hostname: str) -> set[ipaddress.IPv4Address]:
+    results = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+    return {ipaddress.IPv4Address(result[4][0]) for result in results}
+
+
+def read_addresses(
+    lines: Iterable[str],
+    hostname_mode: str = "ignore",
+    resolver: Callable[[str], set[ipaddress.IPv4Address]] = system_resolver,
+) -> Counter[ipaddress.IPv4Address]:
+    """Read ``ADDRESS`` or ``COUNT ADDRESS`` lines and return weighted counts."""
     counts: Counter[ipaddress.IPv4Address] = Counter()
     for line_number, line in enumerate(lines, 1):
-        value = line.strip()
-        if not value:
+        fields = line.split()
+        if not fields:
             continue
+        if len(fields) == 1:
+            count, value = 1, fields[0]
+        elif len(fields) == 2:
+            try:
+                count = int(fields[0])
+            except ValueError as exc:
+                raise ValueError(
+                    f"line {line_number}: repetition count must be an integer"
+                ) from exc
+            if count <= 0:
+                raise ValueError(f"line {line_number}: repetition count must be positive")
+            value = fields[1]
+        else:
+            raise ValueError(f"line {line_number}: expected ADDRESS or COUNT ADDRESS")
         try:
-            counts[ipaddress.IPv4Address(value)] += 1
+            addresses = {ipaddress.IPv4Address(value)}
         except ipaddress.AddressValueError as exc:
-            raise ValueError(f"line {line_number}: invalid IPv4 address: {value!r}") from exc
+            if hostname_mode == "error":
+                raise ValueError(
+                    f"line {line_number}: invalid IPv4 address: {value!r}"
+                ) from exc
+            if hostname_mode == "ignore":
+                print(f"warning: line {line_number}: ignoring hostname {value!r}",
+                      file=sys.stderr)
+                continue
+            try:
+                addresses = resolver(value)
+            except (OSError, UnicodeError) as resolve_error:
+                print(
+                    f"warning: line {line_number}: could not resolve hostname "
+                    f"{value!r}: {resolve_error}",
+                    file=sys.stderr,
+                )
+                continue
+            if not addresses:
+                print(f"warning: line {line_number}: hostname {value!r} has no IPv4 address",
+                      file=sys.stderr)
+                continue
+        for address in addresses:
+            counts[address] += count
     return counts
 
 
@@ -144,17 +237,17 @@ def bootstrap_services(data: dict[str, Any]) -> list[tuple[ipaddress.IPv4Network
     return sorted(result, key=lambda item: item[0].prefixlen, reverse=True)
 
 
-def rdap_lookup(address: ipaddress.IPv4Address, cache: dict[str, Any], timeout: float,
-                context: ssl.SSLContext) -> dict[str, Any]:
+def rdap_lookup(address: ipaddress.IPv4Address, cache: dict[str, Any],
+                client: HttpClient) -> dict[str, Any]:
     if cached := covering_entry(cache["rdap"], address):
         return cached
     if cache["bootstrap"] is None:
-        cache["bootstrap"] = get_json(IANA_BOOTSTRAP, timeout, context)
+        cache["bootstrap"] = client.get_json(IANA_BOOTSTRAP)
     endpoint = next((url for network, url in bootstrap_services(cache["bootstrap"])
                      if address in network), None)
     if endpoint is None:
         raise LookupError(f"no authoritative RDAP service found for {address}")
-    data = get_json(f"{endpoint}/ip/{address}", timeout, context)
+    data = client.get_json(f"{endpoint}/ip/{address}")
     try:
         start = ipaddress.IPv4Address(data["startAddress"])
         end = ipaddress.IPv4Address(data["endAddress"])
@@ -166,12 +259,12 @@ def rdap_lookup(address: ipaddress.IPv4Address, cache: dict[str, Any], timeout: 
     return entry
 
 
-def routing_lookup(address: ipaddress.IPv4Address, cache: dict[str, Any], timeout: float,
-                   context: ssl.SSLContext) -> dict[str, Any]:
+def routing_lookup(address: ipaddress.IPv4Address, cache: dict[str, Any],
+                   client: HttpClient) -> dict[str, Any]:
     if cached := covering_entry(cache["routing"], address):
         return cached
     query = urllib.parse.urlencode({"resource": str(address)})
-    data = get_json(f"{RIPESTAT_NETWORK_INFO}?{query}", timeout, context).get("data", {})
+    data = client.get_json(f"{RIPESTAT_NETWORK_INFO}?{query}").get("data", {})
     prefix = data.get("prefix")
     asns = sorted({int(asn) for asn in data.get("asns", [])})
     if prefix:
@@ -190,10 +283,12 @@ def clean_field(value: object) -> str:
 
 def write_report(address_counts: Counter[ipaddress.IPv4Address], output: TextIO, cache_path: Path,
                  *, refresh: bool = False, timeout: float = 15.0,
-                 strict_lookups: bool = False, ca_bundle: Path | None = None) -> None:
+                 strict_lookups: bool = False, ca_bundle: Path | None = None,
+                 retries: int = 8, request_delay: float = 0.25) -> None:
     """Look up addresses and write a request-count-sorted TSV report."""
     cache = load_cache(cache_path, refresh)
     context = make_tls_context(ca_bundle)
+    client = HttpClient(timeout, context, retries, request_delay)
     groups: dict[tuple[str, tuple[int, ...]], dict[str, Any]] = defaultdict(
         lambda: {"requests": 0, "unique": 0, "ranges": set(), "prefixes": set()}
     )
@@ -201,14 +296,14 @@ def write_report(address_counts: Counter[ipaddress.IPv4Address], output: TextIO,
         total = len(address_counts)
         for position, (address, count) in enumerate(address_counts.items(), 1):
             try:
-                registration = rdap_lookup(address, cache, timeout, context)
+                registration = rdap_lookup(address, cache, client)
             except LookupError as exc:
                 if strict_lookups:
                     raise
                 print(f"warning: {address}: registration lookup: {exc}", file=sys.stderr)
                 registration = {"owner": "UNKNOWN", "range": str(address)}
             try:
-                routing = routing_lookup(address, cache, timeout, context)
+                routing = routing_lookup(address, cache, client)
             except LookupError as exc:
                 if strict_lookups:
                     raise

@@ -83,14 +83,26 @@ to make sure your venv and local config are fully updated.
 
 So far, we have:
 
-ip_owner_report: Group IPv4 request addresses from standard input by registered organization and current origin ASN. Duplicate addresses are counted as separate requests. Results are tab-separated and sorted by descending request count. External lookup results are cached between runs.
+ip_owner_report: Group IPv4 request addresses by registered organization and current origin ASN. Input may come from standard input or a file. Each nonblank line may contain either an address/hostname or a repetition count followed by an address/hostname. Duplicate and explicit counts are carried into the report. Results are tab-separated and sorted by descending request count. External lookup results are cached between runs.
 
 ```
-usage: ip_owner_report [-h] [--cache CACHE] [--refresh] [--timeout TIMEOUT]
+usage: ip_owner_report [-h] [-i FILE] [--hostnames {ignore,resolve,error}]
+                       [--cache CACHE] [--refresh] [--timeout TIMEOUT]
+                       [--retries RETRIES] [--request-delay REQUEST_DELAY]
                        [--strict-lookups] [--ca-bundle CA_BUNDLE]
 ```
 
-For example: `ip_owner_report < addresses.txt > report.tsv`
+By default, hostnames are ignored with a warning. Use `--hostnames resolve` to resolve their IPv4 A records, or `--hostnames error` to reject them. RDAP and routing requests are paced per service. HTTP 429 responses honor the service's `Retry-After` header; when that header is absent, retries use exponential backoff.
+
+For example: `ip_owner_report --input addresses.txt --hostnames resolve > report.tsv`
+
+Input may mix unweighted and weighted lines:
+
+```
+192.0.2.1
+37 198.51.100.8
+12 download-client.example.org
+```
 
 product_volume:  Create a report of data volume in various categories over a time range.
 
@@ -181,7 +193,6 @@ and duration, or an end date and duration.  The end date is included in the proc
   -p [{a,b,c,d,e,all} ...], --probes [{a,b,c,d,e,all} ...]
                         Probes to process
 ```
-
 
 
 

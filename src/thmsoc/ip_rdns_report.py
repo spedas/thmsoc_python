@@ -51,6 +51,20 @@ def second_level_domain(hostname: str) -> str:
     return ".".join(labels[-2:]) if len(labels) >= 2 else NO_RDNS
 
 
+def top_level_domain(hostname: str) -> str:
+    """Return the final label of a hostname, or ``no_rDNS``."""
+    labels = [label for label in hostname.rstrip(".").lower().split(".") if label]
+    return labels[-1] if len(labels) >= 2 else NO_RDNS
+
+
+def aggregate_domain(hostname: str, domain_level: str) -> str:
+    if domain_level == "top":
+        return top_level_domain(hostname)
+    if domain_level == "second":
+        return second_level_domain(hostname)
+    raise ValueError(f"unsupported domain level: {domain_level!r}")
+
+
 def system_reverse_resolver(address: ipaddress.IPv4Address) -> str:
     return socket.gethostbyaddr(str(address))[0]
 
@@ -108,6 +122,7 @@ def write_report(
     cache_path: Path,
     *,
     refresh: bool = False,
+    domain_level: str = "second",
     resolver: Callable[[ipaddress.IPv4Address], str] = system_reverse_resolver,
 ) -> None:
     """Resolve IPv4 sources and write a request-count-sorted TSV report."""
@@ -123,7 +138,7 @@ def write_report(
                 hostname = source
             else:
                 hostname = reverse_name(address, cache, resolver)
-            domain = second_level_domain(hostname) if hostname else NO_RDNS
+            domain = aggregate_domain(hostname, domain_level) if hostname else NO_RDNS
             group = groups[domain]
             group["requests"] += count
             group["sources"].add(source)
@@ -136,7 +151,8 @@ def write_report(
     finally:
         save_cache(cache_path, cache)
 
-    print("requests\tunique_sources\tsecond_level_domain\thostnames", file=output)
+    print(f"requests\tunique_sources\t{domain_level}_level_domain\thostnames",
+          file=output)
     ordered = sorted(groups.items(), key=lambda item: (-item[1]["requests"], item[0]))
     for domain, group in ordered:
         fields = (

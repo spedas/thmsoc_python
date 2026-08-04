@@ -18,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="persistent rDNS cache (default: .ip-rdns-cache.json)")
     parser.add_argument("--refresh", action="store_true",
                         help="ignore cached rDNS lookups")
+    parser.add_argument("--domain-level", choices=("second", "top"), default="second",
+                        help="domain level used for aggregation (default: second)")
     return parser
 
 
@@ -27,7 +29,8 @@ def main() -> int:
         source = args.input.open(encoding="utf-8") if args.input else nullcontext(sys.stdin)
         with source as lines:
             source_counts = read_sources(lines)
-        write_report(source_counts, sys.stdout, args.cache, refresh=args.refresh)
+        write_report(source_counts, sys.stdout, args.cache, refresh=args.refresh,
+                     domain_level=args.domain_level)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

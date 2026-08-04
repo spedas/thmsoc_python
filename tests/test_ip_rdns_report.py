@@ -8,8 +8,10 @@ from unittest.mock import patch
 from thmsoc.cli.ip_rdns_report import main
 from thmsoc.ip_rdns_report import (
     NO_RDNS,
+    aggregate_domain,
     read_sources,
     second_level_domain,
+    top_level_domain,
     write_report,
 )
 
@@ -33,6 +35,22 @@ class IpRdnsReportTests(unittest.TestCase):
     def test_second_level_domain(self):
         self.assertEqual(second_level_domain("host.department.BU.EDU."), "bu.edu")
         self.assertEqual(second_level_domain("localhost"), NO_RDNS)
+
+    def test_top_level_domain(self):
+        self.assertEqual(top_level_domain("host.department.BU.EDU."), "edu")
+        self.assertEqual(top_level_domain("localhost"), NO_RDNS)
+        self.assertEqual(aggregate_domain("host.bu.edu", "top"), "edu")
+
+    def test_report_can_aggregate_by_top_level_domain(self):
+        sources = read_sources(io.StringIO("10 host.bu.edu\n5 download.mit.edu\n2 host.example.com\n"))
+        output = io.StringIO()
+        with TemporaryDirectory() as directory:
+            write_report(sources, output, Path(directory) / "cache.json",
+                         domain_level="top")
+        rows = output.getvalue().splitlines()
+        self.assertEqual(rows[0], "requests\tunique_sources\ttop_level_domain\thostnames")
+        self.assertEqual(rows[1], "15\t2\tedu\tdownload.mit.edu,host.bu.edu")
+        self.assertEqual(rows[2], "2\t1\tcom\thost.example.com")
 
     def test_report_aggregates_domains_and_missing_rdns(self):
         names = {

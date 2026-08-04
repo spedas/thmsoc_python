@@ -22,6 +22,7 @@ gen_l2_batches = "thmsoc.cli.gen_l2_batches:main"
 gen_summary_plot_batches = "thmsoc.cli.gen_summary_plot_batches:main"
 gmag_retrieve_usgs_variometer = "thmsoc.cli.gmag_retrieve_usgs_variometer:main"
 ip_owner_report = "thmsoc.cli.ip_owner_report:main"
+ip_rdns_report = "thmsoc.cli.ip_rdns_report:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

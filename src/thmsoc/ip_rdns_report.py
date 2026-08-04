@@ -123,6 +123,7 @@ def write_report(
     *,
     refresh: bool = False,
     domain_level: str = "second",
+    max_hostnames: int = 10,
     resolver: Callable[[ipaddress.IPv4Address], str] = system_reverse_resolver,
 ) -> None:
     """Resolve IPv4 sources and write a request-count-sorted TSV report."""
@@ -155,10 +156,12 @@ def write_report(
           file=output)
     ordered = sorted(groups.items(), key=lambda item: (-item[1]["requests"], item[0]))
     for domain, group in ordered:
+        hostnames = sorted(group["hostnames"])
+        hostname_field = "many" if len(hostnames) > max_hostnames else ",".join(hostnames)
         fields = (
             str(group["requests"]),
             str(len(group["sources"])),
             domain,
-            ",".join(sorted(group["hostnames"])),
+            hostname_field,
         )
         print("\t".join(fields), file=output)

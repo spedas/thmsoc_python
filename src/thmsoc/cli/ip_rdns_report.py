@@ -8,6 +8,13 @@ import sys
 from thmsoc.ip_rdns_report import read_sources, write_report
 
 
+def nonnegative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Aggregate IPv4 addresses and hostnames by rDNS base domain."
@@ -20,6 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="ignore cached rDNS lookups")
     parser.add_argument("--domain-level", choices=("second", "top"), default="second",
                         help="domain level used for aggregation (default: second)")
+    parser.add_argument("--max-hostnames", type=nonnegative_int, default=10,
+                        help="maximum hostnames listed per row (default: 10)")
     return parser
 
 
@@ -30,7 +39,7 @@ def main() -> int:
         with source as lines:
             source_counts = read_sources(lines)
         write_report(source_counts, sys.stdout, args.cache, refresh=args.refresh,
-                     domain_level=args.domain_level)
+                     domain_level=args.domain_level, max_hostnames=args.max_hostnames)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

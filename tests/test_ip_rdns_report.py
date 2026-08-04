@@ -52,6 +52,22 @@ class IpRdnsReportTests(unittest.TestCase):
         self.assertEqual(rows[1], "15\t2\tedu\tdownload.mit.edu,host.bu.edu")
         self.assertEqual(rows[2], "2\t1\tcom\thost.example.com")
 
+    def test_report_replaces_excess_hostnames_with_many(self):
+        sources = read_sources(io.StringIO(
+            "host1.example.com\nhost2.example.com\nhost3.example.com\n"
+        ))
+        with TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache.json"
+            limited = io.StringIO()
+            write_report(sources, limited, cache, max_hostnames=2)
+            exact = io.StringIO()
+            write_report(sources, exact, cache, max_hostnames=3)
+        self.assertEqual(limited.getvalue().splitlines()[1], "3\t3\texample.com\tmany")
+        self.assertEqual(
+            exact.getvalue().splitlines()[1],
+            "3\t3\texample.com\thost1.example.com,host2.example.com,host3.example.com",
+        )
+
     def test_report_aggregates_domains_and_missing_rdns(self):
         names = {
             ipaddress.IPv4Address("192.12.187.131"): "host.bu.edu",
@@ -95,11 +111,13 @@ class IpRdnsReportTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             input_path = Path(directory) / "sources.txt"
             input_path.write_text("7 host.bu.edu\n192.0.2.1\n", encoding="utf-8")
-            with patch("sys.argv", ["ip_rdns_report", "--input", str(input_path)]):
+            with patch("sys.argv", ["ip_rdns_report", "--input", str(input_path),
+                                    "--max-hostnames", "4"]):
                 self.assertEqual(main(), 0)
         sources = write_report.call_args.args[0]
         self.assertEqual(sources["host.bu.edu"], 7)
         self.assertEqual(sources["192.0.2.1"], 1)
+        self.assertEqual(write_report.call_args.kwargs["max_hostnames"], 4)
 
 
 if __name__ == "__main__":

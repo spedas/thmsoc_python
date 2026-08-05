@@ -83,6 +83,18 @@ to make sure your venv and local config are fully updated.
 
 So far, we have:
 
+ip_rdns_report: Aggregate IPv4 addresses and hostnames by the final two labels of their reverse-DNS hostname. IPv4 addresses without a PTR record are grouped under `no_rDNS`. Hostnames supplied directly in the input are used as-is. Like `ip_owner_report`, each line may contain either a source or a repetition count followed by a source, and input may come from standard input or a file.
+
+```
+usage: ip_rdns_report [-h] [-i FILE] [--cache CACHE] [--refresh]
+                      [--domain-level {second,top}]
+                      [--max-hostnames MAX_HOSTNAMES]
+```
+
+For example: `ip_rdns_report --input addresses.txt > rdns-report.tsv`
+
+The tab-separated output contains weighted request counts, unique source counts, the aggregation domain, and the contributing hostnames. The default `--domain-level second` groups `host.bu.edu` under `bu.edu`; use `--domain-level top` to group it under `edu`. At most 10 hostnames are listed by default. Set `--max-hostnames` to another nonnegative limit; rows exceeding the limit show `many` in the hostname field. PTR results, including missing records, are cached between runs.
+
 ip_owner_report: Group IPv4 request addresses by registered organization and current origin ASN. Input may come from standard input or a file. Each nonblank line may contain either an address/hostname or a repetition count followed by an address/hostname. Duplicate and explicit counts are carried into the report. Results are tab-separated and sorted by descending request count. External lookup results are cached between runs.
 
 ```
@@ -193,8 +205,5 @@ and duration, or an end date and duration.  The end date is included in the proc
   -p [{a,b,c,d,e,all} ...], --probes [{a,b,c,d,e,all} ...]
                         Probes to process
 ```
-
-
-
 
 

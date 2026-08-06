@@ -8,7 +8,7 @@ clone the repository and create a virtual environment with `uv`_::
    cd thmsoc_python
    uv venv --python 3.12
    source .venv/bin/activate
-   uv sync
+   uv sync --all-groups --all-extras
    uv pip install -e .
 
 Copy ``example_thmsoc_python_config.toml`` to

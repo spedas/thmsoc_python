@@ -25,3 +25,8 @@ autodoc_mock_imports = ["pyspedas"]
 templates_path = ["_templates"]
 exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
+
+
+def setup(app):
+    """Disable parallel reads until sphinx-argparse supports domain merging."""
+    app.parallel = 1

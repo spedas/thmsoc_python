@@ -14,7 +14,7 @@ The documentation covers installation, configuration, development and deployment
 To build it locally:
 
 ```console
-uv sync --group docs
+uv sync --all-groups --all-extras
 make -C docs html
 ```
 
@@ -25,7 +25,7 @@ git clone https://github.com/spedas/thmsoc_python.git
 cd thmsoc_python
 uv venv --python 3.12
 source .venv/bin/activate
-uv sync
+uv sync --all-groups --all-extras
 uv pip install -e .
 cp example_thmsoc_python_config.toml thmsoc_python_config.toml
 ```

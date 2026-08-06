@@ -5,9 +5,11 @@ from thmsoc.gmag_retrieve_usgs_variometer import run_gmag_retrieve_usgs_variomet
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_station_arguments, expand_station_arguments
 
-def main() -> int:
-    # Initialize argument parser
-    p = argparse.ArgumentParser()
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line argument parser."""
+    p = argparse.ArgumentParser(
+        description="Retrieve USGS variometer data for THEMIS ground stations."
+    )
     
     # Specify date range arguments
     add_trange_arguments(p)
@@ -36,8 +38,11 @@ def main() -> int:
     p.add_argument("-r", "--retries", help="Number of retries to make if initial segment retrieval attempt fails.", required=False, type=int, default=0)
     # max_num_retries
 
-    # Parse arguments
-    args = p.parse_args()
+    return p
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     
     # Check arguments
     check_trange_arguments(args)
@@ -61,6 +66,4 @@ def main() -> int:
     return exit_status
 
 if __name__ == "__main__":
-    import sys
-    sys.argv=["gmag_retrieve_usgs_variometer","-s","2026-06-01","-d","1","-f","1","-r","2"]
     raise SystemExit(main())

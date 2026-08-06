@@ -5,12 +5,20 @@ import argparse
 from thmsoc.product_volume import run_product_volume
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 
-def main() -> int:
-    # Initialize argument parser
-    p = argparse.ArgumentParser()
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Create a report of product data volume over a time range."
+    )
 
     # Specify date range arguments
-    add_trange_arguments(p)
+    add_trange_arguments(parser)
+
+    return parser
+
+
+def main() -> int:
+    p = build_parser()
 
     # Parse arguments
     args = p.parse_args()
@@ -24,8 +32,4 @@ def main() -> int:
     return 0
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 3:
-        print("Using default time range 2026-04-14 (single day)")
-        sys.argv=["product_volume","-s","2026-04-14","-d","1"]
     raise SystemExit(main())

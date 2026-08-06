@@ -8,9 +8,11 @@ from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_summary_plot_arguments, expand_summary_plot_arguments
 from thmsoc.arguments import add_probe_arguments, expand_probe_arguments
 
-def main() -> int:
-    # Initialize argument parser
-    p = argparse.ArgumentParser()
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line argument parser."""
+    p = argparse.ArgumentParser(
+        description="Create IDL batch files for processing THEMIS summary plots."
+    )
 
     # Specify date range arguments
     add_trange_arguments(p)
@@ -24,8 +26,11 @@ def main() -> int:
     # Specify output directory
     p.add_argument("-o", "--output_directory", help="Directory where master list and batch files will be written", required=True)
 
-    # Parse arguments
-    args = p.parse_args()
+    return p
+
+
+def main() -> int:
+    args = build_parser().parse_args()
 
     # Check arguments
     check_trange_arguments(args)
@@ -46,6 +51,4 @@ def main() -> int:
     return 0
 
 if __name__ == "__main__":
-    import sys
-    sys.argv=["gen_summary_plot_batches","-s","2026-04-14","-d","14","-b","7","--summary_plot_types","all", "--output_directory","/tmp/gen_summary_plot_batches"]
     raise SystemExit(main())

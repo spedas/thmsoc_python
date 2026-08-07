@@ -18,8 +18,6 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
 
     returns modified dict with corrected variable data dtype, pad value, and fillval
     """
-    # TODO: the string variable data is getting borked--maybe datatype is wrong?
-    # TODO: need to verify that these values get cast to the correct type. Not necessarily same type as variable data/fillval 
     cdf_default_pad_values = {
         "CDF_UINT1":254, # 11
         "CDF_INT2":-32767, # 2
@@ -110,32 +108,30 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
             cdf_variable["VarData"] = dtype_toset(cdf_variable["VarData"])
     return cdf_variable    
 
-def list_dict_key(e:dict):
-    return list(e)[0]
-
-def listify_arg(arg_to_listify) -> list:
-    if arg_to_listify is None:
-        arg_to_listify = []
-    if not isinstance(arg_to_listify,list):
-        arg_to_listify=[arg_to_listify]
-    return arg_to_listify
-
-def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False):
+def compare_dict(
+        dict1:dict,
+        dict2:dict,
+        name1:str,
+        name2:str,
+        verbose:bool=False):
     """
     Recursively identifies differences between two dicts
+
+    Parameters
+    ----------
+    verbose : bool
+
     """
-    #key_ignore_none = listify_arg(key_ignore_none)
-    #key_ignore_reorder = listify_arg(key_ignore_none)
-    
+    # TODO: return string containing list of differences, as this might be used for error handling
     abort_comp = False
     if len(set(dict1.keys())-set(dict2.keys())) > 0:
-        if read_diff:
+        if verbose:
             print(f"The following keys from {name1} are absent from {name2}:")
             for key in set(dict1.keys())-set(dict2.keys()):
                 print(key)
         abort_comp = True
     if len(set(dict2.keys())-set(dict1.keys())) > 0:
-        if read_diff:
+        if verbose:
             print(f"The following keys from {name2} are absent from {name1}:")
             for key in set(dict2.keys())-set(dict1.keys()):
                 print(key)
@@ -150,7 +146,7 @@ def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False)
             if type(val_1) != type(val_2):
                 #if not (dict_key in key_ignore_none and (dict1[dict_key] is None or dict2[dict_key] is None)):        
                 print(f"Type mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"].")
-                if read_diff:
+                if verbose:
                     print(f">> Type of {name1}[\"{dict_key}\"]: {type(dict1[dict_key])}")
                     print(f">> Type of {name2}[\"{dict_key}\"]: {type(dict2[dict_key])}")
                 return
@@ -162,7 +158,7 @@ def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False)
                         val_2,
                         f"{name1}[\"{dict_key}\"]",
                         f"{name2}[\"{dict_key}\"]",
-                        read_diff)
+                        verbose)
                 case "list":
                     if not (len(val_1) == len(val_2) == 0):
                         if val_1 != val_2:
@@ -202,27 +198,27 @@ def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False)
                 case "array":
                     if not np.array_equal(val_1,val_2,equal_nan=True):
                         print(f"Array mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                        if read_diff:
+                        if verbose:
                             print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
                             print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
                         abort_comp = True
                 case "ndarray":
                     if val_1.dtype.name != val_2.dtype.name:
                         print(f"NDArray dtype mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                        if read_diff:
+                        if verbose:
                             print(f">> dtype of {name1}[\"{dict_key}\"]: {val_1.dtype.name}")
                             print(f">> dtype of {name2}[\"{dict_key}\"]: {val_2.dtype.name}")
                         abort_comp = True
                     elif val_1.dtype.name not in ['str64','str672','str576']:
                         if not np.array_equal(val_1,val_2,equal_nan=True):
-                            #if read_diff:
+                            #if verbose:
                             #    print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
                             #    print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
                             abort_comp = True
                     else: 
                         if not np.array_equal(val_1,val_2):
                             print(f"NDArray mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                            #if read_diff:
+                            #if verbose:
                             #    print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
                             #    print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
                             abort_comp = True
@@ -230,11 +226,10 @@ def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False)
                     if val_1 != val_2:
                         #if not (dict_key in key_ignore_none and (dict1[dict_key] is None or dict2[dict_key] is None)):                        
                         print(f"Value mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                        if read_diff:
+                        if verbose:
                             print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
                             print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
-                        abort_comp = True
-                    
+                        abort_comp = True          
     if abort_comp:
         return
     return
@@ -441,7 +436,6 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
                         att_list_element = {va_key:'Variable'}
                         if att_list_element not in att_list_v:
                             att_list_v.append(att_list_element)
-                #att_list_v.sort(key=list_dict_key)
                 cdf_struct["CDFInfo"]["Attributes"] = att_list_g + att_list_v
                 # Reorder variables according to zvariables list:
                 cdf_struct["Variables"] = {varname: cdf_struct["Variables"][varname] for varname in cdf_struct["CDFInfo"]["zVariables"]}
@@ -496,14 +490,21 @@ def cdf_generate(
 
     # Verify update worked correctly:
     updated_cdf_struct = cdf_get_struct(output_cdf_fp)
-    compare_dict(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",read_diff=True)#,key_ignore_none=["Pad","FILLVAL"])
+    compare_dict(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",verbose=True)
     return
 
 def cdf_updater(
-        mastercdf_fp:str | Path, 
+        mastercdf_fp:str | Path | None, 
         outputcdf_fp: str | Path | list[str | Path] | None = None, 
         updates: dict | None = None):
+    # TODO: optional path for difference error logging?
+    # TODO: should use a temporary directory to write the file, make the updates, and then to quit if any differences are detected between the updated CDF structure and the written CDF file. If there's an error, the temporary file should be deleted. If no differences are detected, then that temporary CDF should be written to the given outputcdf_fp location. 
+    # TODO: handle updating from list in parallel
     """
+    Updates CDF metadata for each CDF path in outputcdf_fp, using a safety layer to prevent update errors. 
+    
+    First, it checks if the outputcdf_fp points to an already existing CDF file; if it does 
+    
     updates {
         "update_logicalsource": "new_logicalsource_name"
         "rename_var": {
@@ -536,10 +537,6 @@ def cdf_updater(
     }
     Set output_cdf_strs to mastercdf_str to update mastercdf in-place
     """
-    # The changes need to be made while the metadata is being applied
-
-    # If renaming/deleting variables, the output cdf needs that information. Which means that the updates need to be applied to the output cdf. 
-
     # Load mastercdf metadata
     # Check if output CDF already exists; if not, create output cdf from mastercdf
     # load output cdf metadata 
@@ -551,19 +548,21 @@ def cdf_updater(
     # apply metadata changes to output cdf 
     
     # Want to construct a CDF metadata (global and variable attributes) dictionary to update and then use to write the output CDF. The mastercdf can then be closed and possibly rewritten, using the metadata.
-    if type(mastercdf_fp) != Path:
-        mastercdf_fp = Path(mastercdf_fp)
+    
     # Create mastercdf metadata dict from mastercdf file:
-    print("Getting mastercdf struct...")
-    cdf_master = cdf_get_struct(mastercdf_fp)
     
     if outputcdf_fp is None:
         print("Output CDF filepath not provided; updating mastercdf in-place instead...")
-        outputcdf_fp = mastercdf_fp
+        if mastercdf_fp is not None:
+            if type(mastercdf_fp) != Path:
+                mastercdf_fp = Path(mastercdf_fp)
+                outputcdf_fp = mastercdf_fp
+        else:
+            raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+        
     if isinstance(outputcdf_fp,str) or isinstance(outputcdf_fp,Path):
         outputcdf_fp = [outputcdf_fp]
 
-    # TODO: handle this in parallel? this could reduce file write times for large numbers of data cdfs 
     if isinstance(outputcdf_fp,list):
         print("Updating CDFs...")    
         for outputcdf_fp_current in outputcdf_fp:
@@ -575,6 +574,15 @@ def cdf_updater(
                 cdf_output = cdf_get_struct(outputcdf_fp_current)
             else:
                 print("CDF does not exist; using mastercdf struct as template...")
+                if mastercdf_fp is not None:
+                    if type(mastercdf_fp) != Path:
+                        mastercdf_fp = Path(mastercdf_fp)
+                else:
+                    raise ValueError("ERROR! Target CDF does not exist, but mastercdf_fp is not provided! Please provide a filepath to the mastercdf so that a CDF can be created from it.")
+                if not mastercdf_fp.exists():
+                    raise ValueError("ERROR! mastercdf_fp does not point to a valid existing filepath! Please check that the mastercdf_fp is correct.")
+                print("Getting mastercdf struct...")
+                cdf_master = cdf_get_struct(mastercdf_fp)
                 # set outputcdf data as mastercdf data
                 cdf_output = cdf_master.copy()
             print(f"Generating new CDF for {str(outputcdf_fp_current)}...")
@@ -586,32 +594,8 @@ def cdf_updater(
     return
 
 if __name__ == "__main__":
-    # TODO: cdf_struct["CDFInfo"]["Attributes"] list contains same elements, but in different order. Add check to see if they contain same elements, and ignore the difference if they contain the same elements
-    # TODO: check what values the cdfwrite added to the cdf
-    
-    # TODO: Objective: we want the pad and fill value to be loaded as the same type as they will be saved
-    # We need a way of determining how dtype gets reassigned
-    # Pad values are getting default values saved. We need to be able to reassign default pad values while 
-    # writing of both pad and fill val should be handled by write_var method of cdfwrite.CDF()
-
-    # TODO: Pad (instead of Nonetype...):
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_unit"]["VarInfo"]["Pad"] needs to be <class 'str'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_compno"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_time"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_epoch"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_epoch0"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["range_epoch"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_labl"]["VarInfo"]["Pad"] needs to be <class 'str'>
-    
-    # TODO: FILLVAL:
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min"]["VarAttrs"]["FILLVAL"] needs to be <class 'numpy.float64'>, not <class 'numpy.float32'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_compno"]["VarAttrs"]["FILLVAL"] needs to be <class 'numpy.int64'>, not <class 'numpy.int32'>
-    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_time"]["VarAttrs"]["FILLVAL"] somehow has different nan value than output struct
-    
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf").unlink(missing_ok=True)
-    snkq_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_00000000_v01.cdf"))
     cdf_updater(
         mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_00000000_v01.cdf", 
         outputcdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf", 

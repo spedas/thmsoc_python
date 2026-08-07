@@ -10,69 +10,105 @@ Create mastercdf from template with new name and associated CDF attributes/varia
 Update CDF metadata using input argument ()
 Apply metadata from a mastercdf file onto another CDF file (update data CDFs)
 """
-def set_cdf_variable(cdf_datatype,data_val,val_type="var_data"):
+def set_cdf_variable(cdf_variable:dict) -> dict:
     """
     Converts data_val data type/dtype based on cdf_datatype. If data_val is None, applies a default null value to the variable data.
 
     Inspired by _convert_nptype from cdflib.cdfwrite
+
+    returns modified dict with corrected variable data dtype, pad value, and fillval
     """
-    # FILLVAL must be list of fill values
-
-
-    return data_val
-    cdf_defaults = {
-        1:-127,
-        41:-127,
-        2:-32767,
-        4:-2147483647,
-        8:-9223372036854775807,
-        33:-9223372036854775807,
-        11:254,
-        12:65534,
-        14:4294967294
+    # TODO: the string variable data is getting borked--maybe datatype is wrong?
+    # TODO: need to verify that these values get cast to the correct type. Not necessarily same type as variable data/fillval 
+    cdf_default_pad_values = {
+        "CDF_UINT1":254, # 11
+        "CDF_INT2":-32767, # 2
+        "CDF_UINT2":65534, # 12
+        "CDF_INT4":-2147483647, # 4
+        "CDF_UINT4":4294967294, # 14
+        "CDF_EPOCH":0.0, # 31
+        "CDF_EPOCH16":[0.0, 0.0], #32
     }
-    if val_type == "pad":
-        return data_val
+    cdf_default_pad_values.update(dict.fromkeys(["CDF_BYTE", "CDF_INT1"], -127)) # 1, 41
+    cdf_default_pad_values.update(dict.fromkeys(["CDF_INT8", "CDF_TIME_TT2000"], -9223372036854775807)) # 8, 33
+    cdf_default_pad_values.update(dict.fromkeys(["CDF_REAL4","CDF_FLOAT","CDF_REAL8","CDF_DOUBLE"], -1.0e30)) # 21, 44, 22, 45
+    cdf_default_pad_values.update(dict.fromkeys(["CDF_CHAR", "CDF_UCHAR"]," ")) # 51, 52
     
-    #if data_val is None:
-    #    if val_type == "pad":
-    #        return data_val
-    #    if cdf_datatype not in [1,41,2,4,8,33,11,12,14]:
-    #        data_val = np.nan
-    #    else:
-    #        #data_val = cdf_defaults[cdf_datatype]
-    #        return data_val
-    try:
-        match cdf_datatype:
-            case 1 | 41:
-                out_val = np.array(np.int8(data_val)) 
-            case 2:
-                out_val = np.array(np.int16(data_val))
-            case 4: 
-                out_val = np.array(np.int32(data_val))
-            case 8 | 33:
-                out_val = np.array(np.int64(data_val))
-            case 11:
-                out_val = np.array(np.uint8(data_val))
-            case 12:
-                out_val = np.array(np.uint16(data_val))
-            case 14:
-                out_val = np.array(np.uint32(data_val))
-            #case 21 | 44:
-            #    return np.array(np.float32(data_val))
-            case 22 | 45 | 31 | 21 | 44:
-                out_val = np.array(np.float64(data_val))
-            case 32:
-                out_val = np.array(np.complex128(data_val))
-            case 51 | 52:
-                arr = np.asarray(data_val, dtype="U")
-                cleaned_arr = np.char.replace(arr, "\x00", "")
-                out_val = cleaned_arr
-            case _:
-                out_val = np.array(data_val)
-    except:
-        out_val = data_val
-    
+    # after matching the variable datatype, set appropriate variable datatype, pad value, and fillval
+    if cdf_variable["VarInfo"]["Data_Type"] in [51,52]:
+        cdf_variable["VarInfo"]["Pad"]=str(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
+    elif cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
+        cdf_variable["VarInfo"]["Pad"]=float(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
+    else: 
+        cdf_variable["VarInfo"]["Pad"]=int(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
+
+    if "FILLVAL" in cdf_variable["VarAttrs"].keys():
+        if cdf_variable["VarAttrs"]["FILLVAL"] is None:
+            if cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([np.nan])
+            else:
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([cdf_variable["VarInfo"]["Pad"]])
+        else:
+            if isinstance(cdf_variable["VarAttrs"]["FILLVAL"],list):
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array(cdf_variable["VarAttrs"]["FILLVAL"])
+            elif not isinstance(cdf_variable["VarAttrs"]["FILLVAL"],np.ndarray):
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([cdf_variable["VarAttrs"]["FILLVAL"]])
+
+    if cdf_variable["VarInfo"]["Last_Rec"] >= 0:
+        if cdf_variable["VarData"] is None:
+            if "FILLVAL" in cdf_variable["VarAttrs"].keys():
+                cdf_variable["VarData"] = cdf_variable["VarAttrs"]["FILLVAL"]
+            else:
+                if cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
+                    cdf_variable["VarData"] = np.array([np.nan])
+                else:
+                    cdf_variable["VarData"] = np.array([cdf_variable["VarInfo"]["Pad"]])
+        else:
+            if isinstance(cdf_variable["VarData"],list):
+                cdf_variable["VarData"] = np.array(cdf_variable["VarData"])
+            elif not isinstance(cdf_variable["VarData"],np.ndarray):
+                cdf_variable["VarData"] = np.array([cdf_variable["VarData"]])
+    # TODO: throw error if vardata and fillval are not of type np.ndarray
+    match cdf_variable["VarInfo"]["Data_Type"]:
+        case 1 | 41:
+            dtype_toset = np.int8            
+        case 2:
+            dtype_toset = np.int16 
+        case 4: 
+            #dtype_toset = np.int32 
+            dtype_toset = np.int64 
+        case 8 | 33:
+            dtype_toset = np.int64 
+        case 11:
+            dtype_toset = np.uint8 
+        case 12:
+            dtype_toset = np.uint16
+        case 14:
+            dtype_toset = np.uint32
+        case 21 | 44:
+            #dtype_toset = np.float32
+            dtype_toset = np.float64
+        case 22 | 45 | 31:
+            dtype_toset = np.float64
+        case 32:
+            dtype_toset = np.complex128
+        case 51 | 52:
+            dtype_toset = np.str_
+        case _:
+            raise ValueError(f"ERROR! Variable Datatype not recognized. Please check variable: {cdf_variable["VarInfo"]["Variable"]}")
+
+    for attrname in ["FILLVAL","VALIDMIN","VALIDMAX"]:
+        if attrname in cdf_variable["VarAttrs"].keys():
+            cdf_variable["VarAttrs"][attrname] = dtype_toset(cdf_variable["VarAttrs"][attrname])        
+    if cdf_variable["VarInfo"]["Last_Rec"] >= 0:
+        if dtype_toset == np.str_:
+            # Instead, encode as utf-8:
+            str_array=cdf_variable["VarData"]
+            np.strings.encode(cdf_variable["VarData"], encoding='utf-8')
+            cdf_variable["VarData"]=str_array
+        else:
+            cdf_variable["VarData"] = dtype_toset(cdf_variable["VarData"])
+    return cdf_variable    
 
 def list_dict_key(e:dict):
     return list(e)[0]
@@ -131,16 +167,38 @@ def compare_dict(dict1:dict,dict2:dict,name1:str,name2:str,read_diff:bool=False)
                     if not (len(val_1) == len(val_2) == 0):
                         if val_1 != val_2:
                             #if not (dict_key in key_ignore_none and (dict1[dict_key] is None or dict2[dict_key] is None)):        
-                            print(f"List mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
                             if len(val_1) != len(val_2):
+                                print(f"List mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
                                 print(f">> List values have differing length: {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
+                                abort_comp = True
                             else:   
-                                n_diff = 0
-                                for i in range(len(dict1[dict_key])):
-                                    if val_1[i] != val_2[i]:
-                                        n_diff+=1
-                                print(f">> Found {n_diff} differences out of {len(val_1)} elements.") 
-                            abort_comp = True
+                                if all([isinstance(x,dict) for x in val_1]) and all([isinstance(x,dict) for x in val_2]):
+                                    # types of val_1 and val_2 are list[dict], (likely attributes list) so they cannot simply be sorted
+                                    # convert to list of tuples and use set comparison instead:
+                                    val_1_list_tuple=[]
+                                    for element in val_1:
+                                        for key in element.keys():
+                                            val_1_list_tuple.append((key,element[key]))
+                                    val_2_list_tuple=[]
+                                    for element in val_2:
+                                        for key in element.keys():
+                                            val_2_list_tuple.append((key,element[key]))
+                                    if set(val_1_list_tuple) != set(val_2_list_tuple):
+                                        print(f"List mismatch; differing elements found between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
+                                        abort_comp = True     
+                                else:
+                                    # lengths should be the same; check for set equivalency:
+                                    val_set_1 = val_1.sort()
+                                    val_set_2 = val_2.sort()
+                                    if val_set_1 != val_set_2:
+                                        # the sets are not just reordered; they have different elements
+                                        print(f"List mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
+                                        n_diff = 0
+                                        for i in range(len(dict1[dict_key])):
+                                            if val_1[i] != val_2[i]:
+                                                n_diff+=1
+                                        print(f">> Found {n_diff} differences out of {len(val_1)} elements.") 
+                                        abort_comp = True
                 case "array":
                     if not np.array_equal(val_1,val_2,equal_nan=True):
                         print(f"Array mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
@@ -227,23 +285,12 @@ def cdf_get_struct(cdf_path:Path) -> dict:
         var_dict = {}
         var_dict["VarInfo"] = (cdf.varinq(zvar)).__dict__
         var_dict["VarAttrs"] = cdf.varattsget(zvar)
-        if "FILLVAL" in var_dict["VarAttrs"].keys():    
-            var_dict["VarAttrs"]["FILLVAL"] = set_cdf_variable(
-                cdf_datatype=var_dict["VarInfo"]["Data_Type"],
-                data_val=var_dict["VarAttrs"]["FILLVAL"],
-                val_type="fillval")
-        if "Pad" in var_dict["VarInfo"].keys():    
-            var_dict["VarInfo"]["Pad"] = set_cdf_variable(
-                cdf_datatype=var_dict["VarInfo"]["Data_Type"],
-                data_val=var_dict["VarInfo"]["Pad"],
-                val_type="pad")
         try:
             var_dict["VarData"] = cdf.varget(zvar)
         except ValueError:
-            var_dict["VarData"] = set_cdf_variable(
-                cdf_datatype=var_dict["VarInfo"]["Data_Type"],
-                data_val=None)
-        cdf_metadata["Variables"][zvar] = var_dict    
+            var_dict["VarData"] = None
+        # Update variable dict to enforce correct datatypes, pad value, and fillval
+        cdf_metadata["Variables"][zvar] = set_cdf_variable(var_dict)    
     # TODO: Verify that the zvar struct variable entries are not empty, and throw an error if they are
     return cdf_metadata
 
@@ -450,7 +497,6 @@ def cdf_generate(
     # Verify update worked correctly:
     updated_cdf_struct = cdf_get_struct(output_cdf_fp)
     compare_dict(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",read_diff=True)#,key_ignore_none=["Pad","FILLVAL"])
-    print("Done!")
     return
 
 def cdf_updater(
@@ -540,6 +586,29 @@ def cdf_updater(
     return
 
 if __name__ == "__main__":
+    # TODO: cdf_struct["CDFInfo"]["Attributes"] list contains same elements, but in different order. Add check to see if they contain same elements, and ignore the difference if they contain the same elements
+    # TODO: check what values the cdfwrite added to the cdf
+    
+    # TODO: Objective: we want the pad and fill value to be loaded as the same type as they will be saved
+    # We need a way of determining how dtype gets reassigned
+    # Pad values are getting default values saved. We need to be able to reassign default pad values while 
+    # writing of both pad and fill val should be handled by write_var method of cdfwrite.CDF()
+
+    # TODO: Pad (instead of Nonetype...):
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_unit"]["VarInfo"]["Pad"] needs to be <class 'str'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_compno"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_time"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_epoch"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_epoch0"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["range_epoch"]["VarInfo"]["Pad"] needs to be <class 'numpy.ndarray'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_labl"]["VarInfo"]["Pad"] needs to be <class 'str'>
+    
+    # TODO: FILLVAL:
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min"]["VarAttrs"]["FILLVAL"] needs to be <class 'numpy.float64'>, not <class 'numpy.float32'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_compno"]["VarAttrs"]["FILLVAL"] needs to be <class 'numpy.int64'>, not <class 'numpy.int32'>
+    # TODO: cdf_struct["Variables"]["thg_mag_lrv_1min_time"]["VarAttrs"]["FILLVAL"] somehow has different nan value than output struct
+    
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf").unlink(missing_ok=True)
     snkq_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_00000000_v01.cdf"))

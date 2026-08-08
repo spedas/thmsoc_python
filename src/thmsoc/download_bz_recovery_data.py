@@ -96,7 +96,9 @@ def list_remote_files(
             continue
 
         name = Path(urllib.parse.unquote(urllib.parse.urlsplit(href_node.text).path)).name
-        if not name.lower().endswith(".sav") or not name.lower().startswith(f"{probe}_"):
+        # Some share directories use a redundant probe prefix (``tha_fgl_...``),
+        # while others already use the production filename (``fgl_...``).
+        if not name.lower().endswith(".sav"):
             continue
         size_node = item.find(".//{DAV:}getcontentlength")
         size = int(size_node.text) if size_node is not None and size_node.text else None

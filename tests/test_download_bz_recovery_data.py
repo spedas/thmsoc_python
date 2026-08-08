@@ -22,6 +22,11 @@ def test_production_name_removes_probe_prefix():
     )
 
 
+def test_production_name_preserves_name_without_probe_prefix():
+    name = "fgl_sensor_x_2026_01_01_2026_02_01.sav"
+    assert production_name(name, "the") == name
+
+
 def test_destination_directory():
     assert destination_directory(Path("/data"), "tha", 2025) == Path(
         "/data/tha/l1b/fgm/sav_files/2025"

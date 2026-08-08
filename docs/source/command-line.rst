@@ -58,3 +58,19 @@ be read from a file or standard input; output is tab-separated.
    :module: thmsoc.cli.ip_rdns_report
    :func: build_parser
    :prog: ip_rdns_report
+
+download_bz_recovery_data
+-------------------------
+
+Download every Bz recovery ``.sav`` file for one probe and year from the
+Nextcloud public share. Files are installed below
+``PROBE/l1b/fgm/sav_files/YYYY`` under the configured ``output_dataroot``.
+The probe prefix is removed from source filenames during installation.
+
+Passwordless public shares need no prompt. If a share is password protected,
+the command prompts for its password after the first authentication attempt.
+
+.. argparse::
+   :module: thmsoc.cli.download_bz_recovery_data
+   :func: build_parser
+   :prog: download_bz_recovery_data

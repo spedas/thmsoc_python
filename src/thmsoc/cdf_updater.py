@@ -648,7 +648,7 @@ def cdf_updater(
         outputcdf_fp: str | Path | list[str | Path] | None = None, 
         mastercdf_fp: str | Path | None = None, 
         updates: dict = {},
-        num_parallel_jobs: int = 1):
+        num_parallel_jobs: int = 1) -> int:
     """
     Generates one or more CDF file(s) by using an existing CDF (or mastercdf) file as a template, copying the CDF file's contents, and then by applying changes specified by a structure containing update instructions. Creates updated file in temporary directory to prevent file overwrites in the event of update errors. If no update errors detected, moves file from temporary directory to destination directory. 
 
@@ -672,35 +672,38 @@ def cdf_updater(
     num_parallel_jobs : int = 1
         Specifies the max number of jobs to run in parallel; defaults to 1 if the provided value is less than 1
     """
-    # If output CDF path not provided, use mastercdf path instead
-    if outputcdf_fp is None:
-        print("Output CDF filepath not provided; updating mastercdf in-place instead...")
-        if mastercdf_fp is not None:
-            if isinstance(mastercdf_fp,str):
-                mastercdf_fp = Path(mastercdf_fp)
-                outputcdf_fp = mastercdf_fp
+    try:
+        # If output CDF path not provided, use mastercdf path instead
+        if outputcdf_fp is None:
+            print("Output CDF filepath not provided; updating mastercdf in-place instead...")
+            if mastercdf_fp is not None:
+                if isinstance(mastercdf_fp,str):
+                    mastercdf_fp = Path(mastercdf_fp)
+                    outputcdf_fp = mastercdf_fp
+            else:
+                # If neither CDF paths have been passed, throw error: 
+                raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+        # If output CDF path not passed as list, cast as list:
+        if isinstance(outputcdf_fp,(str,Path)):
+            outputcdf_fp = [outputcdf_fp]
+        # Should be list:
+        if isinstance(outputcdf_fp,list):
+            print("Updating CDFs...")
+            max_workers=1
+            if num_parallel_jobs > 1:
+                max_workers = num_parallel_jobs
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures_iterable = [executor.submit(
+                    cdf_load_and_generate,
+                    outputcdf_fp=outputcdf_fp_current,
+                    mastercdf_fp=mastercdf_fp,
+                    updates=updates) for outputcdf_fp_current in outputcdf_fp]    
         else:
-            # If neither CDF paths have been passed, throw error: 
-            raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
-    # If output CDF path not passed as list, cast as list:
-    if isinstance(outputcdf_fp,(str,Path)):
-        outputcdf_fp = [outputcdf_fp]
-    # Should be list:
-    if isinstance(outputcdf_fp,list):
-        print("Updating CDFs...")
-        max_workers=1
-        if num_parallel_jobs > 1:
-            max_workers = num_parallel_jobs
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures_iterable = [executor.submit(
-                cdf_load_and_generate,
-                outputcdf_fp=outputcdf_fp_current,
-                mastercdf_fp=mastercdf_fp,
-                updates=updates) for outputcdf_fp_current in outputcdf_fp]    
-    else:
-        raise ValueError("Outputcdf_fp should be cast to list but was not")
-    print("Done!")
-    return
+            raise ValueError("Outputcdf_fp should be cast to list but was not")
+        print("Done!")
+        return 0
+    except:
+        return 1 
 
 if __name__ == "__main__":
     #Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)

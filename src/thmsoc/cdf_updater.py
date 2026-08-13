@@ -2,14 +2,15 @@ from cdflib import cdfwrite
 from cdflib import cdfread
 from pathlib import Path
 import numpy as np
-
+import tomli
+import shutil
+import concurrent.futures
 """
-Needs to accomplish the following:
-
-Create mastercdf from template with new name and associated CDF attributes/variable names
-Update CDF metadata using input argument ()
-Apply metadata from a mastercdf file onto another CDF file (update data CDFs)
+This script contains functions to: 
+* Create a mastercdf from a template with new name/logical source, and update associated CDF attributes/variable names which match that logical source
+* Update CDF metadata using an input argument
 """
+
 def set_cdf_variable(cdf_variable:dict) -> dict:
     """
     Converts data_val data type/dtype based on cdf_datatype. If data_val is None, applies a default null value to the variable data.
@@ -66,7 +67,7 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
                 cdf_variable["VarData"] = np.array(cdf_variable["VarData"])
             elif not isinstance(cdf_variable["VarData"],np.ndarray):
                 cdf_variable["VarData"] = np.array([cdf_variable["VarData"]])
-    # TODO: throw error if vardata and fillval are not of type np.ndarray
+
     match cdf_variable["VarInfo"]["Data_Type"]:
         case 1 | 41:
             dtype_toset = np.int8            
@@ -94,7 +95,6 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
             dtype_toset = np.str_
         case _:
             raise ValueError(f"ERROR! Variable Datatype not recognized. Please check variable: {cdf_variable["VarInfo"]["Variable"]}")
-
     for attrname in ["FILLVAL","VALIDMIN","VALIDMAX"]:
         if attrname in cdf_variable["VarAttrs"].keys():
             cdf_variable["VarAttrs"][attrname] = dtype_toset(cdf_variable["VarAttrs"][attrname])        
@@ -108,7 +108,7 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
             cdf_variable["VarData"] = dtype_toset(cdf_variable["VarData"])
     return cdf_variable    
 
-def compare_dict(
+def dict_equals(
         dict1:dict,
         dict2:dict,
         name1:str,
@@ -122,7 +122,6 @@ def compare_dict(
     verbose : bool
 
     """
-    # TODO: return string containing list of differences, as this might be used for error handling
     abort_comp = False
     if len(set(dict1.keys())-set(dict2.keys())) > 0:
         if verbose:
@@ -137,7 +136,7 @@ def compare_dict(
                 print(key)
         abort_comp = True
     if abort_comp:
-        return
+        return False
     else:
         dict_keys = dict1.keys()
         for dict_key in dict_keys:
@@ -151,15 +150,16 @@ def compare_dict(
                     print(f">> Type of {name2}[\"{dict_key}\"]: {type(dict2[dict_key])}")
                 return
             # Value types should be the same
-            match type(val_1).__name__:
-                case "dict":
-                    compare_dict(
+            match val_1:
+                case dict():
+                    if not dict_equals(
                         val_1,
                         val_2,
                         f"{name1}[\"{dict_key}\"]",
                         f"{name2}[\"{dict_key}\"]",
-                        verbose)
-                case "list":
+                        verbose):
+                        abort_comp = True
+                case list():
                     if not (len(val_1) == len(val_2) == 0):
                         if val_1 != val_2:
                             #if not (dict_key in key_ignore_none and (dict1[dict_key] is None or dict2[dict_key] is None)):        
@@ -181,7 +181,7 @@ def compare_dict(
                                             val_2_list_tuple.append((key,element[key]))
                                     if set(val_1_list_tuple) != set(val_2_list_tuple):
                                         print(f"List mismatch; differing elements found between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                                        abort_comp = True     
+                                        abort_comp = True
                                 else:
                                     # lengths should be the same; check for set equivalency:
                                     val_set_1 = val_1.sort()
@@ -194,33 +194,26 @@ def compare_dict(
                                             if val_1[i] != val_2[i]:
                                                 n_diff+=1
                                         print(f">> Found {n_diff} differences out of {len(val_1)} elements.") 
-                                        abort_comp = True
-                case "array":
-                    if not np.array_equal(val_1,val_2,equal_nan=True):
-                        print(f"Array mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                        if verbose:
-                            print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
-                            print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
-                        abort_comp = True
-                case "ndarray":
+                                        abort_comp = True                                        
+                case np.ndarray():
                     if val_1.dtype.name != val_2.dtype.name:
                         print(f"NDArray dtype mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
                         if verbose:
                             print(f">> dtype of {name1}[\"{dict_key}\"]: {val_1.dtype.name}")
                             print(f">> dtype of {name2}[\"{dict_key}\"]: {val_2.dtype.name}")
                         abort_comp = True
-                    elif val_1.dtype.name not in ['str64','str672','str576']:
+                    elif val_1.dtype.name[0:3] != 'str':
                         if not np.array_equal(val_1,val_2,equal_nan=True):
-                            #if verbose:
-                            #    print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
-                            #    print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
+                            if verbose:
+                                print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
+                                print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
                             abort_comp = True
                     else: 
                         if not np.array_equal(val_1,val_2):
-                            print(f"NDArray mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
-                            #if verbose:
-                            #    print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
-                            #    print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
+                            print(f"NDArray string mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
+                            if verbose:
+                                print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
+                                print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
                             abort_comp = True
                 case _:
                     if val_1 != val_2:
@@ -229,10 +222,10 @@ def compare_dict(
                         if verbose:
                             print(f">> Value of {name1}[\"{dict_key}\"]: {dict1[dict_key]}")
                             print(f">> Value of {name2}[\"{dict_key}\"]: {dict2[dict_key]}")
-                        abort_comp = True          
+                        abort_comp = True                    
     if abort_comp:
-        return
-    return
+        return False
+    return True
 
 def dict_number_pair(dict_to_convert:dict) -> dict:
     """
@@ -249,9 +242,9 @@ def dict_number_pair(dict_to_convert:dict) -> dict:
             dict_to_convert[key] = key_val_dict
     return dict_to_convert
 
-def cdf_get_struct(cdf_path:Path) -> dict:
+def cdf_get_struct(cdf_path:Path,cdf_path_override:Path | None = None,skip_var_cast:bool = False) -> dict:
     """
-    Returns dict containing CDF data and metadata. Mimics the output of cdf_readcdf in IDL. Assumes all variables are zvariables
+    Reads CDF file and writes contents into a CDF dictionary. Mimics the output of cdf_readcdf in IDL. Assumes all variables are zvariables.
     
     Creates a dictionary of the form:
     cdf_metadata = {
@@ -270,35 +263,41 @@ def cdf_get_struct(cdf_path:Path) -> dict:
     The "GlobalAttrs" key contains the output of globalattsget()
     The "Variables" dict contains keys where each key is a variable name and corresponds to a dict containing "VarInfo" (containing the output of varinq()), "VarAttrs" (containing the output of varattsget()), and "VarData" (containing the output of varget())
     """
-    cdf=cdfread.CDF(str(cdf_path))
-    cdf_metadata={
-        "CDFInfo":(cdf.cdf_info()).__dict__,
-        "GlobalAttrs":dict_number_pair(cdf.globalattsget()),
-        "Variables":{}
-    }
-    for zvar in cdf_metadata["CDFInfo"]["zVariables"]:
-        var_dict = {}
-        var_dict["VarInfo"] = (cdf.varinq(zvar)).__dict__
-        var_dict["VarAttrs"] = cdf.varattsget(zvar)
-        try:
-            var_dict["VarData"] = cdf.varget(zvar)
-        except ValueError:
-            var_dict["VarData"] = None
-        # Update variable dict to enforce correct datatypes, pad value, and fillval
-        cdf_metadata["Variables"][zvar] = set_cdf_variable(var_dict)    
-    # TODO: Verify that the zvar struct variable entries are not empty, and throw an error if they are
+    with cdfread.CDF(str(cdf_path)) as cdf:
+        #cdf=cdfread.CDF(str(cdf_path))
+        cdf_metadata={
+            # TODO rework to avoid using __dict__
+            "CDFInfo":(cdf.cdf_info()).__dict__,
+            "GlobalAttrs":dict_number_pair(cdf.globalattsget()),
+            "Variables":{}
+        }
+        for zvar in cdf_metadata["CDFInfo"]["zVariables"]:
+            var_dict = {}
+            # TODO rework to avoid using __dict__
+            var_dict["VarInfo"] = (cdf.varinq(zvar)).__dict__
+            var_dict["VarAttrs"] = cdf.varattsget(zvar)
+            try:
+                var_dict["VarData"] = cdf.varget(zvar)
+            except ValueError:
+                var_dict["VarData"] = None
+            # Update variable dict to enforce correct datatypes, pad value, and fillval
+            if not skip_var_cast:
+                cdf_metadata["Variables"][zvar] = set_cdf_variable(var_dict)
+            else:
+                cdf_metadata["Variables"][zvar] = var_dict
+    if cdf_path_override is not None:
+        cdf_metadata["CDFInfo"]["CDF"] = cdf_path_override
     return cdf_metadata
 
 def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
     """
-    Update cdf struct dict using updates in updates dict. Return updated cdf struct dict
+    Update CDF dictionary recursively using update instructions. Returns updated CDF dictionary.
     """
     for update_action in updates.keys():
         update_action_obj=updates[update_action]
         match update_action:
             case "update_logicalsource":
                 # queues a bunch of updates and calls cdf_update_struct recursively.
-                # TODO: first check if updates includes new time resolution
                 old_logicalsource=cdf_struct["GlobalAttrs"]["Logical_source"][0]
                 new_logicalsource=update_action_obj
                 new_changes = {
@@ -306,10 +305,14 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
                     "rename_var":{}
                 }
                 new_changes["update_attr"]["global"].update({"Logical_source":new_logicalsource})
+
+                if cdf_struct["GlobalAttrs"]["Logical_file_id"][0] == " ":
+                    raise ValueError("Logical file ID is blank!")
+                # Set default logical file ID if not found while loading structure?
                 if old_logicalsource in cdf_struct["GlobalAttrs"]["Logical_file_id"][0]:
                     id_suffix = (cdf_struct["GlobalAttrs"]["Logical_file_id"][0].split(old_logicalsource))[-1]
                     new_changes["update_attr"]["global"].update({"Logical_file_id":new_logicalsource+id_suffix})
-                # remove level from logical source before checking variable names:
+                # Remove level from logical source before checking variable names:
                 var_format=old_logicalsource
                 new_var_format=new_logicalsource
                 if "l2_" in old_logicalsource:
@@ -317,22 +320,36 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
                 if "l2_" in new_logicalsource:
                     new_var_format="".join(new_logicalsource.split("l2_",1))
                 for var in cdf_struct["Variables"].keys():
+                    # Check if a variable is formatted like the logical source, excluding the level
                     if var_format in var:
-                        var_suffix = (var.split(var_format))[-1]
-                        new_changes["rename_var"].update({var:new_var_format+var_suffix})                      
+                        var_suffix = (var.split(var_format))[-1] # should contain _unit, _labl, _epoch, etc...
+                        new_changes["rename_var"].update({var:new_var_format+var_suffix}) # reconstructs the variable using the new logical source excluding the level and tacking the suffix on at the end
+                    elif len(var) >= 9:
+                        # If variable is a component of the B field, apply additional changes:
+                        if var[0:9] in ["thg_magh_","thg_magd_","thg_magz_"]:
+                            var_suffix = (var.split(var[0:9]))[-1] # should be station code + time resolution (if present)
+                            # Remove "thg_mag_" from the new var format
+                            new_var_format_suffix=(new_var_format.split("thg_mag_"))[-1]
+                            if var_suffix in new_var_format_suffix:
+                                new_changes["rename_var"].update({var:var[0:9]+new_var_format_suffix})
+                            else:
+                                raise ValueError("Component variable name doesn't match logical source.")
                 cdf_struct = cdf_update_struct(cdf_struct,new_changes)
             case "rename_var":
                 rename_dict = update_action_obj
                 new_changes = {
-                    "update_var":{},
                     "remove_var":[],
+                    "update_var":{},
                     "update_var_dependencies":rename_dict
                 }
                 for var_oldname in rename_dict.keys():
                     var_newname = rename_dict[var_oldname]
-                    old_var_value=cdf_struct["Variables"][var_oldname]
-                    new_changes["update_var"].update({var_newname:old_var_value})
-                    new_changes["remove_var"].append(var_oldname)
+                    if cdf_struct["Variables"].get(var_oldname) is not None:
+                        old_var_value=cdf_struct["Variables"][var_oldname]
+                        new_changes["remove_var"].append(var_oldname)
+                        new_changes["update_var"].update({var_newname:old_var_value})
+                    else:
+                        print(f"Variable name \"{var_oldname}\" not found in CDF variables; check if variable as already been renamed")
                 # Update CDFInfo:
                 renamed_vars=rename_dict.copy()
                 # Include variable names which are not changed (value and key are the same):
@@ -369,7 +386,7 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
                     }
                 for scope in update_action_obj.keys():
                     new_changes["update_attr"].update({scope:{}})
-                    new_changes["remove_attr"].update({scope:{}})              
+                    new_changes["remove_attr"].update({scope:[]})
                     for attr_oldname in update_action_obj[scope].keys():
                         match scope:
                             case "global":
@@ -446,81 +463,21 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
     # return cdf_struct:
     return cdf_struct
 
-def cdf_generate(
-        output_cdf_fp:Path,
-        output_cdf_struct:dict,
-        updates:dict | None):
+def validate_updates_dict(updates:dict):
     """
-    Creates updated CDF using original data, if original CDF exists. Applies updates according to updates dict.
+    Checks the keys and values of the updates dictionary against the requirements for cdf_update_struct.
 
-    data is contained in output_cdf_struct dict, so it will be used to write new cdf from scratch
-    """
-    copy_right = (
-        "\nCommon Data Format (CDF)\nhttps://cdf.gsfc.nasa.gov\n"
-        + "Space Physics Data Facility\n"
-        + "NASA/Goddard Space Flight Center\n"
-        + "Greenbelt, Maryland 20771 USA\n"
-        + "(User support: gsfc-cdf-support@lists.nasa.gov)\n"
-    )
-    # Update metadata 
-    if updates is not None:
-        # Ensure CDFInfo reflects created CDF
-        output_cdf_struct["CDFInfo"]["CDF"] = output_cdf_fp
-        output_cdf_struct["CDFInfo"]["Copyright"] = copy_right
-
-        updates.update({"update_CDFInfo_VarInfo":""})
-        output_cdf_struct = cdf_update_struct(output_cdf_struct,updates)
-
-    # TODO: on error, delete created CDF file and raise alert.
-    cdf_output = cdfwrite.CDF(
-        path=output_cdf_fp,
-        cdf_spec=output_cdf_struct["CDFInfo"],
-        delete=True)
-    # Write contents of updated output_cdf_struct to cdf_output_write:
-    # Global attributes:
-    cdf_output.write_globalattrs(globalAttrs=output_cdf_struct.get("GlobalAttrs"))
-    # Variable attributes:
-    for var in output_cdf_struct["Variables"].keys():
-        cdf_output.write_var(
-            var_spec=output_cdf_struct["Variables"][var]["VarInfo"],
-            var_attrs=output_cdf_struct["Variables"][var]["VarAttrs"],
-            var_data=output_cdf_struct["Variables"][var]["VarData"])
-    # That should be it; we can close the CDF
-    cdf_output.close()
-
-    # Verify update worked correctly:
-    updated_cdf_struct = cdf_get_struct(output_cdf_fp)
-    compare_dict(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",verbose=True)
-    return
-
-def cdf_updater(
-        mastercdf_fp:str | Path | None, 
-        outputcdf_fp: str | Path | list[str | Path] | None = None, 
-        updates: dict | None = None):
-    # TODO: optional path for difference error logging?
-    # TODO: should use a temporary directory to write the file, make the updates, and then to quit if any differences are detected between the updated CDF structure and the written CDF file. If there's an error, the temporary file should be deleted. If no differences are detected, then that temporary CDF should be written to the given outputcdf_fp location. 
-    # TODO: handle updating from list in parallel
-    """
-    Updates CDF metadata for each CDF path in outputcdf_fp, using a safety layer to prevent update errors. 
-    
-    First, it checks if the outputcdf_fp points to an already existing CDF file; if it does 
-    
-    updates {
-        "update_logicalsource": "new_logicalsource_name"
+    The updates dictionary has the following form:
+    updates {        
         "rename_var": {
             "var_oldname":"var_newname"
         }
         "update_var":{
             "varname":var_dict
         }
-        "remove_var":[varname1, varname2, ...]
         "rename_attr":{
-            "global":{
-                attr_oldname:attr_newname
-                }
-            "varname":{
-                attr_oldname:attr_newname
-            }
+            "global":{attr_oldname:attr_newname}
+            "varname":{attr_oldname:attr_newname}
         }
         "update_attr":{
             "global":global_atts_dict
@@ -534,96 +491,293 @@ def cdf_updater(
             "global":global_atts_list
             "varname":var_atts_list
         }
+        "update_logicalsource": "new_logicalsource_name"
+        "remove_var":["varname1","varname2",...]
     }
-    Set output_cdf_strs to mastercdf_str to update mastercdf in-place
     """
-    # Load mastercdf metadata
-    # Check if output CDF already exists; if not, create output cdf from mastercdf
-    # load output cdf metadata 
-    # apply updates to output cdf metadata in the following order of priority:
-    #       * update logical source change by renaming attributes and variables
-    #       * rename variables by copying replaced variables under the new name and by deleting the replaced variables
-    #       * update attributes using corresponding method
-    #       * 
-    # apply metadata changes to output cdf 
-    
-    # Want to construct a CDF metadata (global and variable attributes) dictionary to update and then use to write the output CDF. The mastercdf can then be closed and possibly rewritten, using the metadata.
-    
-    # Create mastercdf metadata dict from mastercdf file:
-    
+    def _checktype(name,value,type_to_enforce):
+        if isinstance(value,type_to_enforce):
+            return
+        else:
+            raise ValueError(f"{name} value is supposed to be of type: {type_to_enforce}")
+    def _checkelementtype(name,elements,type_to_enforce):
+        if all(isinstance(x, type_to_enforce) for x in elements):
+            return
+        else:
+            raise ValueError(f"Every element of {name} is supposed to be of type: {type_to_enforce}")
+    for keyname,value in updates.items():
+        match keyname:
+            case "rename_var":
+                _checktype(keyname,value,dict)
+                _checkelementtype(keyname,value.values(),str)
+            case "update_var" | "rename_attr" | "update_attr" | "append_attr":
+                _checktype(keyname,value,dict)
+                _checkelementtype(keyname,value.values(),dict)
+            case "remove_attr":
+                _checktype(keyname,value,dict)
+                _checkelementtype(keyname,value.values(),list)
+            case "update_logicalsource":
+                _checktype(keyname,value,str)
+            case "remove_var":
+                _checktype(keyname,value,list)
+                _checkelementtype(keyname,value,str)
+            case "update_CDFInfo_VarInfo":
+                # type of value does not matter
+                continue
+            case _:
+                raise ValueError(f"Update action not recognized: {keyname}")
+    return
+
+def cdf_generate(
+        output_cdf_struct:dict,
+        updates:dict = {}):
+    """
+    Takes a CDF dictionary, applies changes specified in the updates dictionary, and writes to the path specified within the CDF dictionary. If a file already exists which shares the same path, a copy is first made in a temporary processing directory.
+
+    The new CDF file is loaded into a separate CDF dictionary, and a comparison is made between the CDF dictionary used the write the file and the CDF dictionary read from the file. If there is a difference detected, a list of differences are recorded, and the newly written CDF is removed. If a CDF with the same name had been moved to the temporary processing directory, is is then moved back to its original location. Finally, an error is thrown to stop the updating process.
+
+    See validate_updates_dict for a description of how the updates dictionary should be formatted.
+    """
+    # Initialize updates dictionary if not passed. Otherwise, validate the updates dict to make sure it's formatted using the correct types.
+    if updates is None:
+        updates = {}
+    else:
+        validate_updates_dict(updates)
+    updates.update({"update_CDFInfo_VarInfo":None})
+
+    # Get target CDF path from the input CDF dictionary. 
+    output_cdf_fp = output_cdf_struct["CDFInfo"]["CDF"]
+    # Force the copyright attribute to match the created CDF:
+    copy_right = (
+        "\nCommon Data Format (CDF)\nhttps://cdf.gsfc.nasa.gov\n"
+        + "Space Physics Data Facility\n"
+        + "NASA/Goddard Space Flight Center\n"
+        + "Greenbelt, Maryland 20771 USA\n"
+        + "(User support: gsfc-cdf-support@lists.nasa.gov)\n"
+    )
+    output_cdf_struct["CDFInfo"]["Copyright"] = copy_right
+    # Update the CDF dictionary using the updates dictionary
+    output_cdf_struct = cdf_update_struct(output_cdf_struct,updates)
+
+    overwrite_CDF = False
+    output_cdf_tmp_fp = Path("")
+    # If the target CDF already exists, move it to the temporary directory for safekeeping.
+    if output_cdf_fp.exists():
+        overwrite_CDF = True
+        # Make temporary directory to hold original file (if it already exists) while new file is being written and verified:
+        thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
+        thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
+        try:
+            with open(thmsoc_python_config, "rb") as f:
+                toml_dict = tomli.load(f)
+                TEMPROOT = Path(toml_dict["paths"]["output_dataroot"])
+        except FileNotFoundError:
+            TEMPROOT = Path("/mydisks/home/thmsoc")
+        tmp_proc_p = Path(f"{TEMPROOT}/tmp_cdf_updater")
+        tmp_proc_p.mkdir(parents=True, exist_ok=True)
+        # Make path for the original file in the temporary directory:
+        output_cdf_tmp_fp = Path(f"{tmp_proc_p}/{output_cdf_fp.name}")
+        # Remove any duplicates of the original file in temporary directory:
+        output_cdf_tmp_fp.unlink(missing_ok=True)
+        # Move existing file to temporary directory:
+        #if is_file_opened(output_cdf_fp):
+        #    raise ValueError("ERROR! file is already open!")
+        shutil.move(src=output_cdf_fp,dst=output_cdf_tmp_fp)
+    try:
+        # Write new CDF file to target directory using updated CDF dictionary:
+        with cdfwrite.CDF(path=output_cdf_fp,cdf_spec=output_cdf_struct["CDFInfo"],delete=True) as cdf_output:
+            # Write Global attributes:
+            cdf_output.write_globalattrs(globalAttrs=output_cdf_struct.get("GlobalAttrs"))
+            # Write Variable attributes:
+            for var in output_cdf_struct["Variables"].keys():
+                cdf_output.write_var(
+                    var_spec=output_cdf_struct["Variables"][var]["VarInfo"],
+                    var_attrs=output_cdf_struct["Variables"][var]["VarAttrs"],
+                    var_data=output_cdf_struct["Variables"][var]["VarData"])
+            # Finally, close the newly written CDF: 
+            cdf_output.close()
+        # The updated CDF should currently be in the target directory
+        # Verify update worked correctly; if update failed, delete new CDF in target directory and move old CDF back to target directory, if it existed:
+        updated_cdf_struct = cdf_get_struct(output_cdf_fp)
+        if dict_equals(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",verbose=True):
+            print("CDF passed verification check!")
+            # If original CDF was saved to the processing directory, it can now be removed
+            if overwrite_CDF:
+                print("Removing original CDF from temporary processing directory...")
+                output_cdf_tmp_fp.unlink()
+        else:
+            raise ValueError("CDF failed verification check")    
+        return
+    except ValueError as error:
+        # Remove new file in target directory:
+        output_cdf_fp.unlink()
+        # If original CDF was saved to the processing directory, move it back to the target directory:
+        if overwrite_CDF:
+            shutil.move(
+                src=output_cdf_tmp_fp,
+                dst=output_cdf_fp)
+        raise ValueError(f"CDF Update Failed! Reason: {error}. Removing temporary CDF file...")
+
+def cdf_load_and_generate(outputcdf_fp:str | Path, mastercdf_fp:str | Path | None = None, updates:dict = {}):
+    if isinstance(outputcdf_fp,str):
+        outputcdf_fp=Path(outputcdf_fp)
+    if outputcdf_fp.exists():
+        print("CDF exists; getting existing CDF structure...")
+        # get outputcdf data
+        cdf_output = cdf_get_struct(outputcdf_fp)
+    else:
+        print("CDF does not exist; using mastercdf struct as template...")
+        if mastercdf_fp is not None:
+            if isinstance(mastercdf_fp,str):
+                mastercdf_fp = Path(mastercdf_fp)
+        else:
+            raise ValueError("ERROR! Target CDF does not exist, but mastercdf_fp is not provided! Please provide a filepath to the mastercdf so that a CDF can be created from it.")
+        if not mastercdf_fp.exists():
+            raise ValueError("ERROR! mastercdf_fp does not point to a valid existing filepath! Please check that the mastercdf_fp is correct.")
+        print("Getting mastercdf struct...")
+        cdf_master = cdf_get_struct(mastercdf_fp,cdf_path_override=outputcdf_fp)
+        # set outputcdf data as mastercdf data
+        cdf_output = cdf_master.copy()
+    print(f"Generating new CDF for {str(outputcdf_fp)}...")
+    cdf_generate(
+        output_cdf_struct=cdf_output,
+        updates=updates)
+    return
+
+def cdf_updater(
+        outputcdf_fp: str | Path | list[str | Path] | None = None, 
+        mastercdf_fp: str | Path | None = None, 
+        updates: dict = {},
+        num_parallel_jobs: int = 1):
+    """
+    Generates one or more CDF file(s) by using an existing CDF (or mastercdf) file as a template, copying the CDF file's contents, and then by applying changes specified by a structure containing update instructions. Creates updated file in temporary directory to prevent file overwrites in the event of update errors. If no update errors detected, moves file from temporary directory to destination directory. 
+
+    The target CDF file path \"outputcdf_fp\" is checked first to see if the file path points to an already existing file; the file exists, then the function attempts to re-create the target CDF file with the applied updates. If the target CDF file path does not point to an existing file, then a new file is created using the provided mastercdf filepath mastercdf_fp as a template.  
+
+    First, it checks if the outputcdf_fp points to an already existing CDF file; if it does,  
+    Set output_cdf_strs to mastercdf_str to update mastercdf in-place
+
+    Parameters
+    ----------
+    inputcdf_fp: str | Path | list[str | Path] | None = None
+        The input CDF file path(s). If string path or list of string paths is provided, attempts to parse string as Path object. If None, uses output CDF file path(s) as input CDF file path(s).  
+    outputcdf_fp : str | Path | list[str | Path] | None = None
+        The output CDF file path(s). If string path or list of string paths is provided, attempts to parse string as Path object. If None, uses input CDF file path(s) as output CDF file path(s).
+    mastercdf_fp : str | Path | None = None
+        The mastercdf file path(s). If a string path is provided, attempts to parse string as Path object. 
+    updates : dict
+        The update instructions. If left as None, attempts to update the output CDFs using the mastercdf metadata, provided they share the same variables.
+
+        The updates dictionary has a specific format (see validate_updates_dict), where each key is an update action and each value contains the parameters required for the update. Each update action is completed in the order they are defined.
+    num_parallel_jobs : int = 1
+        Specifies the max number of jobs to run in parallel; defaults to 1 if the provided value is less than 1
+    """
+    # If output CDF path not provided, use mastercdf path instead
     if outputcdf_fp is None:
         print("Output CDF filepath not provided; updating mastercdf in-place instead...")
         if mastercdf_fp is not None:
-            if type(mastercdf_fp) != Path:
+            if isinstance(mastercdf_fp,str):
                 mastercdf_fp = Path(mastercdf_fp)
                 outputcdf_fp = mastercdf_fp
         else:
+            # If neither CDF paths have been passed, throw error: 
             raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
-        
-    if isinstance(outputcdf_fp,str) or isinstance(outputcdf_fp,Path):
+    # If output CDF path not passed as list, cast as list:
+    if isinstance(outputcdf_fp,(str,Path)):
         outputcdf_fp = [outputcdf_fp]
-
+    # Should be list:
     if isinstance(outputcdf_fp,list):
-        print("Updating CDFs...")    
-        for outputcdf_fp_current in outputcdf_fp:
-            if isinstance(outputcdf_fp_current,str):
-                outputcdf_fp_current=Path(outputcdf_fp_current)
-            if outputcdf_fp_current.exists():
-                print("CDF exists; getting existing CDF structure...")
-                # get outputcdf data
-                cdf_output = cdf_get_struct(outputcdf_fp_current)
-            else:
-                print("CDF does not exist; using mastercdf struct as template...")
-                if mastercdf_fp is not None:
-                    if type(mastercdf_fp) != Path:
-                        mastercdf_fp = Path(mastercdf_fp)
-                else:
-                    raise ValueError("ERROR! Target CDF does not exist, but mastercdf_fp is not provided! Please provide a filepath to the mastercdf so that a CDF can be created from it.")
-                if not mastercdf_fp.exists():
-                    raise ValueError("ERROR! mastercdf_fp does not point to a valid existing filepath! Please check that the mastercdf_fp is correct.")
-                print("Getting mastercdf struct...")
-                cdf_master = cdf_get_struct(mastercdf_fp)
-                # set outputcdf data as mastercdf data
-                cdf_output = cdf_master.copy()
-            print(f"Generating new CDF for {str(outputcdf_fp_current)}...")
-            cdf_generate(
-                output_cdf_fp=outputcdf_fp_current,
-                output_cdf_struct=cdf_output,
-                updates=updates)
+        print("Updating CDFs...")
+        max_workers=1
+        if num_parallel_jobs > 1:
+            max_workers = num_parallel_jobs
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures_iterable = [executor.submit(
+                cdf_load_and_generate,
+                outputcdf_fp=outputcdf_fp_current,
+                mastercdf_fp=mastercdf_fp,
+                updates=updates) for outputcdf_fp_current in outputcdf_fp]    
+    else:
+        raise ValueError("Outputcdf_fp should be cast to list but was not")
     print("Done!")
     return
 
 if __name__ == "__main__":
-    Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
+    #Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf").unlink(missing_ok=True)
-    cdf_updater(
-        mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_00000000_v01.cdf", 
-        outputcdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf", 
-        updates={
-            "update_logicalsource":"thg_l2_mag_lrv_1min",
-            "update_attr":{
-                "global":{
-                    'Time_resolution':'1 minute',
-                    'Generation_date':'2026-07-28',
-                    'spase_DatasetResourceID':'',
-                    'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
-                    'MODS':'Rev-2026-07-28 (dcarpenter): CDF template created.'
-                }
-            }
-        })
+    #cdf_updater(
+    #    mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_00000000_v01.cdf", 
+    #    outputcdf_fp=["C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf"], 
+    #    updates={
+    #        "update_logicalsource":"thg_l2_mag_lrv_1min",
+    #        "update_attr":{
+    #            "global":{
+    #                'Time_resolution':'1 minute',
+    #                'Generation_date':'2026-07-28',
+    #                'spase_DatasetResourceID':'',
+    #                'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
+    #                'MODS':'Rev-2026-07-28 (dcarpenter): CDF template created.'
+    #            }
+    #        }
+    #    })
+    
+    # "C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf",
+    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf").unlink(missing_ok=True)
+    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf").unlink(missing_ok=True)
+    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf").unlink(missing_ok=True)
+    
+    shutil.copy(
+        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
+        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf")
+    shutil.copy(
+        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
+        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf")
+    shutil.copy(
+        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf",
+        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf")
+
+    old_cdf_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf"),skip_var_cast=True)
+    
     cdf_updater(
         mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_00000000_v01.cdf", 
-        outputcdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf", 
+        outputcdf_fp=[
+            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
+            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
+            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf"],
         updates={
             "update_logicalsource":"thg_l2_mag_snkq_1min",
+            "rename_attr":{
+                "global":{
+                    "Spase_datasetresourceid":"spase_DatasetResourceID"
+                }
+            },
             "update_attr":{
                 "global":{
-                    'Time_resolution':'1 minute',
-                    'Generation_date':'2026-07-28',
-                    'spase_DatasetResourceID':'',
-                    'Logical_source_description':'Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network',
-                    'MODS':'Rev-2026-07-28 (dcarpenter): CDF template created.'
+                    "Time_resolution":"1 minute",
+                    "Generation_date":"20260812",
+                    "spase_DatasetResourceID":"",
+                    "Logical_source_description":"Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network",
+                    "MODS":"Rev-2026-08-12 (dcarpenter): CDF template created."
                 }
             }
         })
-    
+
+    new_cdf_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf"),skip_var_cast=True)
+
+    dict_equals(
+        dict1=old_cdf_struct,
+        dict2=new_cdf_struct,
+        name1="old_cdf_struct",
+        name2="new_cdf_struct",
+        verbose=True)
+
+    print("Done!")
+
+    #"rename_var":{"thg_magh_snkq":"thg_magh_snkq_1min","thg_magd_snkq":"thg_magd_snkq_1min","thg_magz_snkq":"thg_magz_snkq_1min"},
+                
+                
+    #Path("C:/Users/DC/Documents/Projects/tracers_mag_L2_tasks/task_1/ts2_l2_mag_bdc-16sps_00000000_v1.0.0.cdf").#unlink(missing_ok=True)
+    #cdf_updater(
+    #    mastercdf_fp="C:/Users/DC/Documents/Projects/tracers_mag_L2/mastercdf/ts2_l2_mag_bdc-16sps_00000000_v1.0.#0.cdf",
+    #    outputcdf_fp="C:/Users/DC/Documents/Projects/tracers_mag_L2_tasks/task_1/ts2_l2_mag_bdc-16sps_00000000_v1.#0.0.cdf"
+    #)

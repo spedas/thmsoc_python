@@ -216,4 +216,4 @@ def run_gmag_retrieve_alternate(
     return
 
 if __name__ == "__main__":
-    run_gmag_retrieve_alternate(station_code=["snkq","lrv"],start_date="2026-02-01",end_date="2026-07-01")
+    run_gmag_retrieve_alternate(station_code=["snkq"],start_date="2026-01-20",end_date="2026-01-21")

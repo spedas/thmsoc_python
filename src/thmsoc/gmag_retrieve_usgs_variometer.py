@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from concurrent import futures
 from thmsoc import args_to_startend, batch_daterange
+from typing import TextIO
 
 def str_list_max(in_list:list[str]) -> str: 
     if len(in_list) == 0:
@@ -558,7 +559,11 @@ def run_gmag_retrieve_usgs_variometer(
     
     import sys
     # Set line buffering to avoid long pauses when viewing output with 'tail'
-    sys.stdout.reconfigure(line_buffering=True)
+    #if hasattr(sys.stdout, 'reconfigure'):
+    if not isinstance(sys.stdout,TextIO):
+        sys.stdout.reconfigure(line_buffering=True)
+    else:
+        raise TypeError("stdout must not be TextIO (needs reconfigure attribute)")
     
     main_start_time = dt.datetime.now()
     str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  

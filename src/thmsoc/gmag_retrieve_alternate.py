@@ -7,11 +7,14 @@ import datetime as dt
 from thmsoc.url_retrieve_file import url_retrieve_file
 from pathlib import Path
 import tomli
+import obspy
 from obspy.clients.fdsn import Client as fdsn_client
 from obspy.clients.fdsn.header import FDSNNoDataException
 from obspy.clients.fdsn.header import FDSNException
 from obspy import UTCDateTime
 from thmsoc import simple_daterange
+from urllib3 import BaseHTTPResponse
+import shutil
 
 def midcenlon_to_tenthsmineast(midcenlon_deg):
     if midcenlon_deg < 0:
@@ -22,10 +25,15 @@ def midcenlon_to_tenthsmineast(midcenlon_deg):
     tenthsmineast = frac_turn * 21600 * 10
     return tenthsmineast
 
-def retrieve_alt_file(scode:str, date:dt.date, tmp_root:Path=Path("")) -> dict:
+def retrieve_alt_file(
+        scode:str,
+        date:dt.date, 
+        data_root:str | Path,
+        mirror_dir:str | Path | None = None) -> dict:
     # determine which retrieval method to use from the station code
     # TODO: this could use pyspedas gmag to get the gmag metadata to find group name
-    print(f"Retrieving {scode} data for {date}...")
+    # TODO: figure out if we want to mirror the 1 minute lrv and snkq data
+    print(f"Retrieving {scode} data for {date.strftime('%Y-%m-%d')}...")
 
     retrieval_attempt_result = {"error_status":""}
     group_str = ""
@@ -57,8 +65,11 @@ def retrieve_alt_file(scode:str, date:dt.date, tmp_root:Path=Path("")) -> dict:
             decbas_deg = -14.9
         case "lrv":
             group_str = "lrv"
-    proc_dir = Path(f"{tmp_root}/retrieve_alternate/{group_str}")
-    proc_dir.mkdir(parents=True, exist_ok=True)
+    if isinstance(data_root,str):
+        data_root = Path(data_root)
+    # data root should be /disks/themisdata
+    workdir = Path(f"{data_root}/workdir/gmag/alt_remote_sources/{group_str}")
+    workdir.mkdir(parents=True, exist_ok=True)
     try:
         match group_str:
             case "nrcan":
@@ -73,12 +84,17 @@ def retrieve_alt_file(scode:str, date:dt.date, tmp_root:Path=Path("")) -> dict:
                     stream_list = []
                     time_list = []
                     for cha in channel_list:
-                        tmp = st.select(channel=cha,**{x: waveform_kwargs[x] for x in waveform_kwargs if x != "channel"}) 
-                        tmp.merge(fill_value=99999)
-                        #stream_data_arr = tmp.traces[0].data
-                        #stream_data_arr[stream_data_arr==np.nan] = 99999
-                        stream_list.append(tmp.traces[0].data)
-                        time_list.append(tmp.traces[0].times("utcdatetime"))
+                        if isinstance(st,obspy.Stream):
+                            tmp = st.select(channel=cha,**{x: waveform_kwargs[x] for x in waveform_kwargs if x != "channel"}) 
+                            tmp.merge(fill_value=99999)
+                            #stream_data_arr = tmp.traces[0].data
+                            #stream_data_arr[stream_data_arr==np.nan] = 99999
+                            stream_list.append(tmp.traces[0].data)
+                            time_list.append(tmp.traces[0].times("utcdatetime"))
+                        else:
+                            raise TypeError(
+                                "get_waveforms did not return obspy.Stream object.",
+                                "get_waveforms did not return obspy.Stream object")
                     # for each stream data and time array, create iaga2002 format text file using THEMIS naming convention
                     if not (time_list[0].all()==time_list[1].all()==time_list[2].all()==time_list[3].all()):
                         raise ValueError(
@@ -135,41 +151,60 @@ def retrieve_alt_file(scode:str, date:dt.date, tmp_root:Path=Path("")) -> dict:
                     data_str = "\n".join(data_str_list)
                     iaga_list = [header_str,data_str]
                     iaga_str = "\n".join(iaga_list) + "\n"
-                    output_filepath = Path(f"{proc_dir}/{scode.lower()}{date.strftime('%Y%m%d')}vmin.min")
+                    fn = "".join([
+                        f"{scode.lower()}_1min",
+                        f"{date.strftime('%Y%m%d')}",
+                        "vmin",
+                        ".min"
+                    ])
+                    output_filepath = Path(f"{workdir}/{fn}")
                     output_filepath.unlink(missing_ok=True)
                     output_file = open(output_filepath, "x")
                     output_file.close()
                     with open(output_filepath, "a") as of:
                             of.write(iaga_str)
+                    if mirror_dir is not None:
+                        if isinstance(mirror_dir,str):
+                            mirror_dir=Path(mirror_dir)
+                        shutil.copy(output_filepath,mirror_dir / f"{fn}")
                 except FDSNNoDataException:
                     raise ValueError("ERROR: Data not available for this date.","No data for this date")
                 except FDSNException as error:
                     match error.status_code:
                         case "404":
                             raise ValueError("ERROR: Webpage not found!","Webpage not found error")
-
             case "lrv":
                 fn = "".join([
-                    "lrv",
+                    "lrv_1min",
                     f"{date.year}"[-2:],
                     f"{date.strftime("%b")}".lower(),
                     ".min"
                 ])        
                 url = f"http://cygnus.rhi.hi.is/~halo/UCLA/{date.year}/{fn}"
                 # URL contains ascii text which we can write to file.
-                output_filepath = Path(f"{proc_dir}/{fn}")
+                output_filepath = Path(f"{workdir}/{fn}")
                 bytes_response = url_retrieve_file(
                     url,
                     out_filename=output_filepath,
                     format="bytes")
-                string_response=bytes_response.data.decode('utf-8')
+                if isinstance(bytes_response,BaseHTTPResponse):
+                    string_response=bytes_response.data.decode('utf-8')
+                    
+                else:
+                    raise TypeError("Response must be BaseHTTPResponse object","Incorrect response object type")
                 output_filepath.unlink(missing_ok=True)
-                output_file = open(output_filepath, "x")
-                output_file.close()
                 with open(output_filepath, "a") as of:
                         of.write(string_response)
+                if mirror_dir is not None:
+                    if isinstance(mirror_dir,str):
+                        mirror_dir=Path(mirror_dir)
+                    shutil.copy(output_filepath,mirror_dir / f"{fn}")
         return retrieval_attempt_result
     except ValueError as error:
+        print(error.args[0] + " File could not be written; Aborting file retrieval...")
+        #out_dict["error_status"] = error.args[1]
+        retrieval_attempt_result["error_status"] = error.args[1]
+    except TypeError as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
         #out_dict["error_status"] = error.args[1]
         retrieval_attempt_result["error_status"] = error.args[1]
@@ -179,17 +214,19 @@ def run_gmag_retrieve_alternate(
         station_code:str | list[str], 
         start_date: str, 
         end_date: str,
-        out_dir:str="",
-        issue_list_fp:str=""):
+        mirror_dir:str | Path | None = None,
+        issue_list_fp: str | Path | None = None):
+    main_start_time = dt.datetime.now()
+    str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
     
     thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
     thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
     try:
         with open(thmsoc_python_config, "rb") as f:
             toml_dict = tomli.load(f)
-            TEMPROOT = Path(toml_dict["paths"]["temproot"])
+            OUTPUT_DATAROOT = Path(toml_dict["paths"]["output_dataroot"])
     except FileNotFoundError:
-        TEMPROOT = Path("/mydisks/home/thmsoc/thmsoc_python")
+        OUTPUT_DATAROOT = Path("/disks/themisdata")
     
     if type(station_code) == str:
         scodes = [station_code]
@@ -198,7 +235,9 @@ def run_gmag_retrieve_alternate(
     
     dt_start_date = dt.datetime.strptime(start_date,'%Y-%m-%d')
     dt_end_date = dt.datetime.strptime(end_date,'%Y-%m-%d')
+    missing_file_list = ""
     for scode in scodes:
+        result_dict = {"error_status":""}
         match scode:
             case "lrv":
                 # use monthly mode:
@@ -208,12 +247,36 @@ def run_gmag_retrieve_alternate(
                 dates_monthly = sorted(set(dates_monthly_unsorted))
                 #dates_monthly = sorted(set([dt.datetime.strptime(x.strftime("%Y-%m-01"),"%Y-%m-%d") for x in dates_daily]))
                 for current_date in dates_monthly:
-                    retrieve_alt_file(scode=scode, date=current_date, tmp_root=TEMPROOT)
+                    result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
+                    if result_dict["error_status"] != "":
+                        missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
             case _:
                 # use daily mode:    
                 for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
-                    retrieve_alt_file(scode=scode, date=current_date, tmp_root=TEMPROOT)
-    return
+                    result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
+                    if result_dict["error_status"] != "":
+                        missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
+    if missing_file_list != "":
+        print("Retrieval was attempted for the following files, but failed for the following reasons: ")
+        print(missing_file_list)
+        # Make directory if it doesn't exist:
+        failed_list_p = Path(f"{OUTPUT_DATAROOT}/process_logs/gmag/webdownloads/mag/alt_remote_sources")
+
+        if issue_list_fp is not None:
+            if isinstance(issue_list_fp,str):
+                failed_list_fp = Path(issue_list_fp)
+            else:
+                failed_list_fp = issue_list_fp
+        else:
+            failed_list_p.mkdir(parents=True, exist_ok=True)
+            failed_list_fp = Path(f"{failed_list_p}/failed_list{str_datetime_run}.txt")
+        # Create file and print missing file list to file:
+        failed_list_fp.unlink(missing_ok=True)
+        with open(failed_list_fp, 'a') as failedf:
+            print(missing_file_list, file=failedf)
+        return 1
+    else:
+        return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_alternate(station_code=["snkq"],start_date="2026-01-20",end_date="2026-01-21")
+    run_gmag_retrieve_alternate(station_code=["snkq"],start_date="2026-01-01",end_date="2026-01-06")

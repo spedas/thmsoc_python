@@ -166,6 +166,8 @@ def retrieve_alt_file(
                     if mirror_dir is not None:
                         if isinstance(mirror_dir,str):
                             mirror_dir=Path(mirror_dir)
+                        mirror_dir = mirror_dir / f"{date.strftime('%Y')}" / f"{date.strftime('%m')}"
+                        mirror_dir.mkdir(parents=True, exist_ok=True)
                         shutil.copy(output_filepath,mirror_dir / f"{fn}")
                 except FDSNNoDataException:
                     raise ValueError("ERROR: Data not available for this date.","No data for this date")
@@ -189,7 +191,6 @@ def retrieve_alt_file(
                     format="bytes")
                 if isinstance(bytes_response,BaseHTTPResponse):
                     string_response=bytes_response.data.decode('utf-8')
-                    
                 else:
                     raise TypeError("Response must be BaseHTTPResponse object","Incorrect response object type")
                 output_filepath.unlink(missing_ok=True)
@@ -198,6 +199,8 @@ def retrieve_alt_file(
                 if mirror_dir is not None:
                     if isinstance(mirror_dir,str):
                         mirror_dir=Path(mirror_dir)
+                    mirror_dir = mirror_dir / f"{date.strftime('%Y')}" / f"{date.strftime('%m')}"
+                    mirror_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copy(output_filepath,mirror_dir / f"{fn}")
         return retrieval_attempt_result
     except ValueError as error:

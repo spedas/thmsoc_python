@@ -62,10 +62,11 @@ be read from a file or standard input; output is tab-separated.
 download_bz_recovery_data
 -------------------------
 
-Download every Bz recovery ``.sav`` file for one probe and year from the
-Nextcloud public share. Files are installed below
+Download Bz recovery ``.sav`` files for one probe and year from the Nextcloud
+public share. FGS files are downloaded by default; ``--type`` selects FGL,
+FGS, or both. Remote filenames are preserved exactly, including a probe prefix
+when present. Files are installed below
 ``PROBE/l1b/fgm/sav_files/YYYY`` under the configured ``output_dataroot``.
-The probe prefix is removed from source filenames during installation.
 
 Passwordless public shares need no prompt. If a share is password protected,
 the command prompts for its password after the first authentication attempt.

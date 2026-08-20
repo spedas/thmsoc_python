@@ -9,12 +9,19 @@ from thmsoc.download_bz_recovery_data import DEFAULT_SHARE_URL, fetch_year
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Download all Bz recovery .sav files for a THEMIS probe and year, "
+            "Download selected Bz recovery .sav files for a THEMIS probe and year, "
             "then install them in the production directory hierarchy."
         )
     )
     parser.add_argument("probe", choices=("tha", "thb", "thc", "thd", "the"))
     parser.add_argument("year", type=int)
+    parser.add_argument(
+        "--type",
+        dest="recovery_type",
+        choices=("fgl", "fgs", "both"),
+        default="fgs",
+        help="recovery file type to download (default: %(default)s)",
+    )
     parser.add_argument(
         "--share-url",
         default=DEFAULT_SHARE_URL,
@@ -31,7 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     downloaded = fetch_year(
-        args.probe, args.year, share_url=args.share_url, dataroot=args.dataroot
+        args.probe,
+        args.year,
+        share_url=args.share_url,
+        dataroot=args.dataroot,
+        recovery_type=args.recovery_type,
     )
     print(f"Downloaded {len(downloaded)} files.")
     return 0

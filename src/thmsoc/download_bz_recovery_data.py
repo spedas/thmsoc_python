@@ -4,7 +4,6 @@ import base64
 import getpass
 import os
 import re
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +20,7 @@ except ModuleNotFoundError:  # Python 3.10
 DEFAULT_SHARE_URL = "https://cloud.tu-braunschweig.de/s/k93M36pRnXKeQYX"
 DEFAULT_DATAROOT = Path("/disks/themisdata")
 PROBE_RE = re.compile(r"th[a-e]\Z", re.IGNORECASE)
+RECOVERY_TYPES = frozenset({"fgl", "fgs"})
 
 
 @dataclass(frozen=True)
@@ -72,9 +72,35 @@ def _request(
     return urllib.request.urlopen(request)
 
 
+def requested_recovery_types(recovery_type: str) -> frozenset[str]:
+    """Expand a CLI/API recovery-type selection into concrete file prefixes."""
+    recovery_type = recovery_type.lower()
+    if recovery_type == "both":
+        return RECOVERY_TYPES
+    if recovery_type not in RECOVERY_TYPES:
+        raise ValueError("recovery_type must be fgl, fgs, or both")
+    return frozenset({recovery_type})
+
+
+def recovery_type_from_name(name: str, probe: str) -> str | None:
+    """Return the recovery type for a valid prefixed or unprefixed SAV name."""
+    match = re.fullmatch(
+        rf"(?:{re.escape(probe)}_)?(fgl|fgs)_sensor_x_.+\.sav",
+        name,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1).lower() if match else None
+
+
 def list_remote_files(
-    webdav_root: str, token: str, password: str, probe: str, year: int
+    webdav_root: str,
+    token: str,
+    password: str,
+    probe: str,
+    year: int,
+    recovery_type: str = "fgs",
 ) -> list[RemoteFile]:
+    selected_types = requested_recovery_types(recovery_type)
     remote_directory = f"{probe.upper()}/{year}/"
     directory_url = urllib.parse.urljoin(webdav_root, remote_directory)
     with _request(
@@ -96,23 +122,14 @@ def list_remote_files(
             continue
 
         name = Path(urllib.parse.unquote(urllib.parse.urlsplit(href_node.text).path)).name
-        # Some share directories use a redundant probe prefix (``tha_fgl_...``),
-        # while others already use the production filename (``fgl_...``).
-        if not name.lower().endswith(".sav"):
+        file_recovery_type = recovery_type_from_name(name, probe)
+        if file_recovery_type not in selected_types:
             continue
         size_node = item.find(".//{DAV:}getcontentlength")
         size = int(size_node.text) if size_node is not None and size_node.text else None
         files.append(RemoteFile(name, urllib.parse.urljoin(directory_url, urllib.parse.quote(name)), size))
 
     return sorted(files, key=lambda remote_file: remote_file.name)
-
-
-def production_name(remote_name: str, probe: str) -> str:
-    """Remove the redundant probe prefix used by the recovery-data share."""
-    prefix = f"{probe.lower()}_"
-    if remote_name.lower().startswith(prefix):
-        return remote_name[len(prefix) :]
-    return remote_name
 
 
 def default_dataroot() -> Path:
@@ -135,12 +152,11 @@ def download_files(
     token: str,
     password: str,
     destination: Path,
-    probe: str,
 ) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
     downloaded: list[Path] = []
     for index, remote_file in enumerate(files, start=1):
-        target = destination / production_name(remote_file.name, probe)
+        target = destination / remote_file.name
         partial = target.with_name(f".{target.name}.part")
         size_text = f" ({remote_file.size:,} bytes)" if remote_file.size is not None else ""
         print(f"[{index}/{len(files)}] {remote_file.name}{size_text} -> {target}")
@@ -169,23 +185,31 @@ def fetch_year(
     dataroot: Path | None = None,
     password: str = "",
     prompt_for_password: bool = True,
+    recovery_type: str = "fgs",
 ) -> list[Path]:
     probe = probe.lower()
     if not PROBE_RE.fullmatch(probe):
         raise ValueError("probe must be one of tha, thb, thc, thd, or the")
     if year < 2007 or year > 9999:
         raise ValueError("year must be 2007 or later")
+    requested_recovery_types(recovery_type)
 
     webdav_root, token = parse_share_url(share_url)
     try:
-        files = list_remote_files(webdav_root, token, password, probe, year)
+        files = list_remote_files(
+            webdav_root, token, password, probe, year, recovery_type
+        )
     except urllib.error.HTTPError as exc:
         if exc.code != 401 or password or not prompt_for_password:
             raise
         password = getpass.getpass("Share password: ")
-        files = list_remote_files(webdav_root, token, password, probe, year)
+        files = list_remote_files(
+            webdav_root, token, password, probe, year, recovery_type
+        )
 
     if not files:
-        raise FileNotFoundError(f"no {probe} .sav files found in the share for {year}")
+        raise FileNotFoundError(
+            f"no {probe} {recovery_type} .sav files found in the share for {year}"
+        )
     destination = destination_directory(dataroot or default_dataroot(), probe, year)
-    return download_files(files, token, password, destination, probe)
+    return download_files(files, token, password, destination)

@@ -2,7 +2,7 @@
 
 Python tools used for THEMIS Science Operations Center processing.
 
-The project uses the [`src` layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/). Core implementations live in `src/thmsoc`, command-line wrappers live in `src/thmsoc/cli`, and installed commands are declared in `pyproject.toml` under `[project.scripts]`. Supporting IDL procedures live in [`idl`](idl/README.md).
+The project uses the [`src` layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/). Core implementations live in `src/thmsoc`, command-line wrappers live in `src/thmsoc/cli`, and installed commands are declared in `pyproject.toml` under `[project.scripts]`.
 
 ## Documentation
 

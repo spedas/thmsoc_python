@@ -8,6 +8,9 @@ def main() -> int:
     # Output CDFs:
     p.add_argument("-f", "--outputcdf_fp", help="Output CDF filepath(s)", nargs='*', required=False, type=str, default=None)
 
+    # Output CDF list:
+    p.add_argument("-l", "--outputcdflist_fp", help="List containing output CDF filepath(s)", required=False, type=str, default=None)
+    
     # mastercdf:
     p.add_argument("-m", "--mastercdf_fp", help="Mastercdf CDF filepath", required=False, type=str, default=None)
 

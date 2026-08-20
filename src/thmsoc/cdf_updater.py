@@ -645,7 +645,8 @@ def cdf_load_and_generate(outputcdf_fp:str | Path, mastercdf_fp:str | Path | Non
     return
 
 def cdf_updater(
-        outputcdf_fp: str | Path | list[str | Path] | None = None, 
+        outputcdf_fp: str | Path | list[str | Path] | None = None,
+        outputcdflist_fp: str | Path | None = None,
         mastercdf_fp: str | Path | None = None, 
         updates: dict = {},
         num_parallel_jobs: int = 1) -> int:
@@ -659,10 +660,10 @@ def cdf_updater(
 
     Parameters
     ----------
-    inputcdf_fp: str | Path | list[str | Path] | None = None
-        The input CDF file path(s). If string path or list of string paths is provided, attempts to parse string as Path object. If None, uses output CDF file path(s) as input CDF file path(s).  
     outputcdf_fp : str | Path | list[str | Path] | None = None
         The output CDF file path(s). If string path or list of string paths is provided, attempts to parse string as Path object. If None, uses input CDF file path(s) as output CDF file path(s).
+    outputcdflist_fp: str | Path | None = None
+        A file containing the path to each output file, line separated. If set, overrides outputcdf_fp.
     mastercdf_fp : str | Path | None = None
         The mastercdf file path(s). If a string path is provided, attempts to parse string as Path object. 
     updates : dict
@@ -673,33 +674,41 @@ def cdf_updater(
         Specifies the max number of jobs to run in parallel; defaults to 1 if the provided value is less than 1
     """
     try:
-        # If output CDF path not provided, use mastercdf path instead
-        if outputcdf_fp is None:
-            print("Output CDF filepath not provided; updating mastercdf in-place instead...")
-            if mastercdf_fp is not None:
-                if isinstance(mastercdf_fp,str):
-                    mastercdf_fp = Path(mastercdf_fp)
-                    outputcdf_fp = mastercdf_fp
-            else:
-                # If neither CDF paths have been passed, throw error: 
-                raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+        if outputcdflist_fp is None:
+            # If output CDF path not provided, use mastercdf path instead
+            if outputcdf_fp is None:
+                print("Output CDF filepath not provided; updating mastercdf in-place instead...")
+                if mastercdf_fp is not None:
+                    if isinstance(mastercdf_fp,str):
+                        mastercdf_fp = Path(mastercdf_fp)
+                        outputcdf_fp = mastercdf_fp
+                else:
+                    # If neither CDF paths have been passed, throw error: 
+                    raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+        else:
+            if isinstance(outputcdflist_fp,str):
+                outputcdflist_fp = Path(outputcdflist_fp)
+            with open(outputcdflist_fp, 'r') as file:
+                # Read all lines into a list
+                output_filelist = file.readlines()
         # If output CDF path not passed as list, cast as list:
         if isinstance(outputcdf_fp,(str,Path)):
-            outputcdf_fp = [outputcdf_fp]
+            output_filelist = [outputcdf_fp]
         # Should be list:
         if isinstance(outputcdf_fp,list):
-            print("Updating CDFs...")
-            max_workers=1
-            if num_parallel_jobs > 1:
-                max_workers = num_parallel_jobs
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures_iterable = [executor.submit(
-                    cdf_load_and_generate,
-                    outputcdf_fp=outputcdf_fp_current,
-                    mastercdf_fp=mastercdf_fp,
-                    updates=updates) for outputcdf_fp_current in outputcdf_fp]    
+            output_filelist = outputcdf_fp    
         else:
             raise ValueError("Outputcdf_fp should be cast to list but was not")
+        print("Updating CDFs...")
+        max_workers=1
+        if num_parallel_jobs > 1:
+            max_workers = num_parallel_jobs
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures_iterable = [executor.submit(
+                cdf_load_and_generate,
+                outputcdf_fp=outputcdf_fp_current,
+                mastercdf_fp=mastercdf_fp,
+                updates=updates) for outputcdf_fp_current in output_filelist]
         print("Done!")
         return 0
     except:

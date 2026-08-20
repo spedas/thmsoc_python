@@ -263,20 +263,22 @@ def run_gmag_retrieve_alternate(
         print("Retrieval was attempted for the following files, but failed for the following reasons: ")
         print(missing_file_list)
         # Make directory if it doesn't exist:
-        failed_list_p = Path(f"{OUTPUT_DATAROOT}/process_logs/gmag/webdownloads/mag/alt_remote_sources")
-
-        if issue_list_fp is not None:
+        if (issue_list_fp is not None) and (issue_list_fp != ""):
             if isinstance(issue_list_fp,str):
                 failed_list_fp = Path(issue_list_fp)
             else:
                 failed_list_fp = issue_list_fp
         else:
+            failed_list_p = OUTPUT_DATAROOT.joinpath('process_logs','gmag','webdownloads','mag','alt_remote_sources')
             failed_list_p.mkdir(parents=True, exist_ok=True)
-            failed_list_fp = Path(f"{failed_list_p}/failed_list{str_datetime_run}.txt")
+            failed_list_fp = failed_list_p.joinpath(f"failed_list{str_datetime_run}.txt")
         # Create file and print missing file list to file:
         failed_list_fp.unlink(missing_ok=True)
-        with open(failed_list_fp, 'a') as failedf:
-            print(missing_file_list, file=failedf)
+        failedf = open(failed_list_fp, "x")
+        failedf.close()
+        with open(failed_list_fp, "a") as of:
+            print(missing_file_list, file=of)
+        print(f"Wrote missing files to: {failed_list_fp}")
         return 1
     else:
         return 0

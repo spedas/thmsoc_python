@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from concurrent import futures
 from thmsoc import args_to_startend, batch_daterange
+from typing import TextIO
 
 def str_list_max(in_list:list[str]) -> str: 
     if len(in_list) == 0:
@@ -59,7 +60,7 @@ def construct_usgs_query(
         data_format = 'json'
         ):
     '''
-    construct URLs which query USGS server
+    construct URLs to query USGS server
     '''
     usgs_netloc='geomag.usgs.gov'
     usgs_path=usgs_remote_source_path
@@ -384,16 +385,9 @@ def retrieve_file_bytes(
         start_datetime:dt.datetime,
         end_datetime:dt.datetime,
         sampling_period:str,
-        max_num_retries:int,
-        correct_time=True) -> urllib3.response.BaseHTTPResponse:
+        max_num_retries:int) -> urllib3.response.BaseHTTPResponse:
     try:
         # use parameters to construct query, make request:
-        #if sampling_period == "0.1" and correct_time:
-        #    corrected_time_start = dt.datetime.now()
-        #    start_datetime = correct_start_time(
-        #        station_code=station_code,
-        #        start_datetime=start_datetime,
-        #        sampling_period=sampling_period)
         url=construct_usgs_query(
             station_code=station_code,
             start_datetime=start_datetime,
@@ -423,8 +417,7 @@ def retrieve_file_bytes(
                             start_datetime=start_datetime,
                             end_datetime=end_datetime,
                             sampling_period=sampling_period,
-                            max_num_retries=max_num_retries-1,
-                            correct_time=False)
+                            max_num_retries=max_num_retries-1)
                         return url_response_bytes_retry
                     else:
                         raise ValueError(
@@ -438,8 +431,7 @@ def retrieve_file_bytes(
                             start_datetime=start_datetime,
                             end_datetime=end_datetime,
                             sampling_period=sampling_period,
-                            max_num_retries=max_num_retries-1,
-                            correct_time=False)
+                            max_num_retries=max_num_retries-1)
                         return url_response_bytes_retry
                     else:
                         raise ValueError(
@@ -567,7 +559,11 @@ def run_gmag_retrieve_usgs_variometer(
     
     import sys
     # Set line buffering to avoid long pauses when viewing output with 'tail'
-    sys.stdout.reconfigure(line_buffering=True)
+    #if hasattr(sys.stdout, 'reconfigure'):
+    if not isinstance(sys.stdout,TextIO):
+        sys.stdout.reconfigure(line_buffering=True)
+    else:
+        raise TypeError("stdout must not be TextIO (needs reconfigure attribute)")
     
     main_start_time = dt.datetime.now()
     str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  

@@ -47,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args()
     try:
         source = args.input.open(encoding="utf-8") if args.input else nullcontext(sys.stdin)

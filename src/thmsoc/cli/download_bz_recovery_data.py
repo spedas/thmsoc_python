@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 import urllib.error
 from datetime import date
 from pathlib import Path
@@ -153,6 +154,7 @@ def process_downloads(args: argparse.Namespace) -> bool:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     started = date.today()
     args = build_parser().parse_args(argv)
     try:

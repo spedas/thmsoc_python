@@ -1,6 +1,7 @@
 
 # src/thmsoc/cli/generate_reprocess_l2_batches.py
 import argparse
+import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
 from thmsoc import make_l2_batches
@@ -33,6 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args()
 
     # Check arguments

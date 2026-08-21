@@ -1,5 +1,6 @@
 # src/thmsoc/cli/product_volume.py
 import argparse
+import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
 from thmsoc.product_volume import run_product_volume
@@ -18,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     p = build_parser()
 
     # Parse arguments

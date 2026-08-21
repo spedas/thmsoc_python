@@ -1,6 +1,7 @@
 
 # src/thmsoc/cli/gmag_retrieve_usgs_variometer.py
 import argparse
+import sys
 from thmsoc.gmag_retrieve_usgs_variometer import run_gmag_retrieve_usgs_variometer
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_station_arguments, expand_station_arguments
@@ -42,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args()
     
     # Check arguments

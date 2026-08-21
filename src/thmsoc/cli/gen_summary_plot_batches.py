@@ -1,6 +1,7 @@
 
 # src/thmsoc/cli/gen_summary_plot_batches.py
 import argparse
+import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
 from thmsoc.gen_summary_plot_batches import make_plot_batches
@@ -30,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args()
 
     # Check arguments

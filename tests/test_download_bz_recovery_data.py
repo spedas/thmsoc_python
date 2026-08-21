@@ -1,7 +1,11 @@
 import io
+import subprocess
+import urllib.error
+from datetime import date
 from pathlib import Path
 
 import thmsoc.download_bz_recovery_data as downloader
+import thmsoc.cli.download_bz_recovery_data as cli
 from thmsoc.download_bz_recovery_data import (
     RemoteFile,
     destination_directory,
@@ -11,7 +15,12 @@ from thmsoc.download_bz_recovery_data import (
     recovery_type_from_name,
     requested_recovery_types,
 )
-from thmsoc.cli.download_bz_recovery_data import build_parser
+from thmsoc.cli.download_bz_recovery_data import (
+    build_parser,
+    process_batch_source,
+    process_downloads,
+    resolve_directories,
+)
 
 
 def test_parse_share_url_ignores_directory_query():
@@ -43,14 +52,139 @@ def test_requested_recovery_types():
     assert requested_recovery_types("both") == {"fgl", "fgs"}
 
 
-def test_cli_defaults_to_fgs():
-    args = build_parser().parse_args(["tha", "2025"])
+def test_cli_requires_and_accepts_multiple_probes_and_years():
+    args = build_parser().parse_args(
+        ["--probes", "tha", "the", "--years", "2024", "2025"]
+    )
+    assert args.probes == ["tha", "the"]
+    assert args.years == [2024, 2025]
+    assert args.recovery_type == "fgl"
+
+
+def test_cli_accepts_fgs_and_processing_options(tmp_path):
+    args = build_parser().parse_args(
+        [
+            "--probes", "the", "--years", "2025", "--type", "fgs",
+            "--process-downloads", "--reprocess",
+            "--download-directory", str(tmp_path / "downloads"),
+            "--production-directory", str(tmp_path / "production"),
+            "--working-directory", str(tmp_path / "working"),
+            "--temp-directory", str(tmp_path / "temp"),
+        ]
+    )
     assert args.recovery_type == "fgs"
+    assert args.process_downloads
+    assert args.reprocess
 
 
-def test_cli_accepts_both():
-    args = build_parser().parse_args(["tha", "2025", "--type", "both"])
-    assert args.recovery_type == "both"
+def test_resolve_directories_uses_config_and_start_date(monkeypatch):
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: {"paths": {"temproot": "/tmp/root", "output_dataroot": "/data"}},
+    )
+    args = build_parser().parse_args(
+        ["--probes", "the", "--years", "2025", "--process-downloads"]
+    )
+
+    resolve_directories(args, date(2026, 8, 21))
+
+    assert args.download_directory == Path("/tmp/root/bz_recovery_download_20260821")
+    assert args.production_directory == Path("/data")
+    assert args.working_directory == Path(
+        "/tmp/root/bz_recovery_working_directory_20260821"
+    )
+    assert args.temp_directory == Path("/tmp/root/bz_recovery_tempdir_20260821")
+
+
+def test_process_batch_source_maps_probes_paths_and_reprocess(tmp_path):
+    args = build_parser().parse_args(
+        [
+            "--probes", "tha", "the", "--years", "2025", "--type", "fgs",
+            "--process-downloads", "--reprocess",
+            "--download-directory", str(tmp_path / "downloads"),
+            "--production-directory", str(tmp_path / "production"),
+            "--working-directory", str(tmp_path / "working"),
+            "--temp-directory", str(tmp_path / "temp"),
+        ]
+    )
+
+    source = process_batch_source(args)
+
+    assert "probes=['a', 'e']" in source
+    assert f"input_dataroot='{tmp_path / 'downloads'}'" in source
+    assert f"output_dataroot='{tmp_path / 'production'}'" in source
+    assert f"workdir='{tmp_path / 'working'}'" in source
+    assert f"tmpdir='{tmp_path / 'temp'}'" in source
+    assert "type_to_process='fgs'" in source
+    assert source.endswith(", /reprocess\nexit\n")
+
+
+def test_process_downloads_requires_success_status(monkeypatch, tmp_path):
+    args = build_parser().parse_args(
+        [
+            "--probes", "the", "--years", "2025", "--process-downloads",
+            "--download-directory", str(tmp_path / "downloads"),
+            "--production-directory", str(tmp_path / "production"),
+            "--working-directory", str(tmp_path / "working"),
+            "--temp-directory", str(tmp_path / "temp"),
+        ]
+    )
+
+    def fake_run_idl(batch_path, **kwargs):
+        assert kwargs["stdin"] == subprocess.DEVNULL
+        (kwargs["cwd"] / "status").write_text("Success\n", encoding="utf-8")
+        return subprocess.CompletedProcess(["idl", str(batch_path)], 0)
+
+    monkeypatch.setattr(cli, "run_idl", fake_run_idl)
+
+    assert process_downloads(args)
+    assert (args.working_directory / "process_bz_downloads.bm").is_file()
+
+
+def test_process_downloads_rejects_failure_status(monkeypatch, tmp_path):
+    args = build_parser().parse_args(
+        [
+            "--probes", "the", "--years", "2025", "--process-downloads",
+            "--download-directory", str(tmp_path / "downloads"),
+            "--production-directory", str(tmp_path / "production"),
+            "--working-directory", str(tmp_path / "working"),
+            "--temp-directory", str(tmp_path / "temp"),
+        ]
+    )
+
+    def fake_run_idl(batch_path, **kwargs):
+        (kwargs["cwd"] / "status").write_text("Failure\n", encoding="utf-8")
+        return subprocess.CompletedProcess(["idl", str(batch_path)], 0)
+
+    monkeypatch.setattr(cli, "run_idl", fake_run_idl)
+    assert not process_downloads(args)
+
+
+def test_main_downloads_cartesian_product_and_skips_unavailable(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_fetch(probe, year, **kwargs):
+        calls.append((probe, year, kwargs))
+        if (probe, year) == ("tha", 2024):
+            raise FileNotFoundError("not present")
+        if (probe, year) == ("the", 2024):
+            raise urllib.error.HTTPError("url", 404, "missing", {}, None)
+        return [tmp_path / f"{probe}-{year}.sav"]
+
+    monkeypatch.setattr(cli, "fetch_year", fake_fetch)
+    result = cli.main(
+        [
+            "--probes", "tha", "the", "--years", "2024", "2025",
+            "--type", "fgs", "--download-directory", str(tmp_path),
+        ]
+    )
+
+    assert result == 0
+    assert [(probe, year) for probe, year, _ in calls] == [
+        ("tha", 2024), ("tha", 2025), ("the", 2024), ("the", 2025)
+    ]
+    assert all(call[2]["dataroot"] == tmp_path for call in calls)
 
 
 def test_download_preserves_remote_filename(monkeypatch, tmp_path):

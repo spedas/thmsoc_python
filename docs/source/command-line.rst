@@ -62,11 +62,18 @@ be read from a file or standard input; output is tab-separated.
 download_bz_recovery_data
 -------------------------
 
-Download Bz recovery ``.sav`` files for one probe and year from the Nextcloud
-public share. FGS files are downloaded by default; ``--type`` selects FGL,
-FGS, or both. Remote filenames are preserved exactly, including a probe prefix
-when present. Files are installed below
-``PROBE/l1b/fgm/sav_files/YYYY`` under the configured ``output_dataroot``.
+Download Bz recovery ``.sav`` files for one or more probes and years from the
+Nextcloud public share. FGL files are downloaded by default; ``--type`` may
+select FGL or FGS. Remote filenames are preserved exactly, including a probe
+prefix when present. Files are placed below
+``PROBE/l1b/fgm/sav_files/YYYY`` under the download directory.
+
+With ``--process-downloads``, the command runs the IDL
+``process_bz_downloads`` routine after all downloads finish. Its batch file,
+separate standard-output and standard-error logs, and final status file are
+written under the working directory. The production, working, temporary, and
+download roots can be overridden with command-line options; otherwise they are
+derived from ``output_dataroot`` and ``temproot`` in the project configuration.
 
 Passwordless public shares need no prompt. If a share is password protected,
 the command prompts for its password after the first authentication attempt.

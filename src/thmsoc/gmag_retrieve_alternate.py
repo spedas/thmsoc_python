@@ -177,15 +177,21 @@ def retrieve_alt_file(
                         case "404":
                             raise ValueError("ERROR: Webpage not found!","Webpage not found error")
             case "lrv":
-                fn = "".join([
+                fn_in = "".join([
+                    "lrv",
+                    f"{date.year}"[-2:],
+                    f"{date.strftime("%b")}".lower(),
+                    ".min"
+                ])
+                fn_out = "".join([
                     "lrv_1min",
                     f"{date.year}"[-2:],
                     f"{date.strftime("%b")}".lower(),
                     ".min"
                 ])        
-                url = f"http://cygnus.rhi.hi.is/~halo/UCLA/{date.year}/{fn}"
+                url = f"http://cygnus.rhi.hi.is/~halo/UCLA/{date.year}/{fn_in}"
                 # URL contains ascii text which we can write to file.
-                output_filepath = Path(f"{workdir}/{fn}")
+                output_filepath = Path(f"{workdir}/{fn_out}")
                 bytes_response = url_retrieve_file(
                     url,
                     out_filename=output_filepath,
@@ -202,7 +208,7 @@ def retrieve_alt_file(
                         mirror_dir=Path(mirror_dir)
                     mirror_dir = mirror_dir / f"{date.strftime('%Y')}" / f"{date.strftime('%m')}"
                     mirror_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.copy(output_filepath,mirror_dir / f"{fn}")
+                    shutil.copy(output_filepath,mirror_dir / f"{fn_out}")
         return retrieval_attempt_result
     except ValueError as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
@@ -292,4 +298,4 @@ def run_gmag_retrieve_alternate(
         return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_alternate(station_code=["snkq"],start_date="2026-01-01",end_date="2026-01-06")
+    run_gmag_retrieve_alternate(station_code=["lrv"],start_date="2026-01-01",end_date="2026-02-01")

@@ -294,9 +294,9 @@ def run_gmag_retrieve_alternate(
                 print(missing_file_list, file=of)
             print(f"Wrote missing files to: {failed_list_fp}")
             if critical_error:
-                sys.exit(3)
+                sys.exit(1)
             else:
-                sys.exit(2)
+                sys.exit(0)
         else:
             sys.exit(0)
     except:

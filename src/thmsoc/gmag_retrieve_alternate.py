@@ -15,6 +15,8 @@ from obspy import UTCDateTime
 from thmsoc import simple_daterange
 from urllib3 import BaseHTTPResponse
 import shutil
+from typing import TextIO
+
 
 def midcenlon_to_tenthsmineast(midcenlon_deg):
     if midcenlon_deg < 0:
@@ -32,7 +34,6 @@ def retrieve_alt_file(
         mirror_dir:str | Path | None = None) -> dict:
     # determine which retrieval method to use from the station code
     # TODO: this could use pyspedas gmag to get the gmag metadata to find group name
-    # TODO: figure out if we want to mirror the 1 minute lrv and snkq data
     print(f"Retrieving {scode} data for {date.strftime('%Y-%m-%d')}...")
 
     retrieval_attempt_result = {"error_status":""}
@@ -219,6 +220,13 @@ def run_gmag_retrieve_alternate(
         end_date: str,
         mirror_dir:str | Path | None = None,
         issue_list_fp: str | Path | None = None):
+    import sys
+    # Set line buffering to avoid long pauses when viewing output with 'tail'
+    if not isinstance(sys.stdout,TextIO):
+        sys.stdout.reconfigure(line_buffering=True)
+    else:
+        raise TypeError("stdout must not be TextIO (requires reconfigure attribute)")
+
     main_start_time = dt.datetime.now()
     str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
     

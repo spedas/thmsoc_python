@@ -715,7 +715,7 @@ def cdf_updater(
         return 1 
 
 if __name__ == "__main__":
-    #Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
+    Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
     Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf").unlink(missing_ok=True)
     #cdf_updater(
     #    mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_00000000_v01.cdf", 
@@ -734,19 +734,19 @@ if __name__ == "__main__":
     #    })
     
     # "C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf",
-    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf").unlink(missing_ok=True)
-    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf").unlink(missing_ok=True)
-    Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf").unlink(missing_ok=True)
+    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf").unlink(missing_ok=True)
+    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf").unlink(missing_ok=True)
+    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf").unlink(missing_ok=True)
     
-    shutil.copy(
-        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
-        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf")
-    shutil.copy(
-        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
-        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf")
-    shutil.copy(
-        src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf",
-        dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf")
+    #shutil.copy(
+    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
+    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf")
+    #shutil.copy(
+    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
+    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf")
+    #shutil.copy(
+    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf",
+    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf")
 
     old_cdf_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf"),skip_var_cast=True)
     

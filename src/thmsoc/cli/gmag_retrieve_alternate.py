@@ -12,7 +12,7 @@ run_gmag_retrieve_alternate(
     issue_list_fp: str | Path | None = None)
 """
 
-def main() -> int:
+def main():
     # Initialize argument parser
     p = argparse.ArgumentParser()
     
@@ -36,16 +36,16 @@ def main() -> int:
     # Check arguments
     check_trange_arguments(args)
 
-    exit_status = 0
+    #exit_status = 0
     # Run the variometer retrieval script:
-    exit_status = run_gmag_retrieve_alternate(
+    run_gmag_retrieve_alternate(
         station_code=args.station_codes,
         start_date=args.start_date,
         end_date=args.end_date,
         mirror_dir=args.mirror_dir,
         issue_list_fp=args.issue_list_fp
     )
-    return exit_status
+    #return exit_status
 
 if __name__ == "__main__":
     raise SystemExit(main())

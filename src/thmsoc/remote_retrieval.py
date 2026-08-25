@@ -87,13 +87,3 @@ def url_retrieve_file(url,out_filename:Path | None = None,format:str | None=None
             else:
                 url_response = (urlretrieve(url))[1]
     return url_response
-
-if __name__ == "__main__":
-    bytes_response = retrieve_file_bytes(
-        url=(
-            "https://geomag.usgs.gov/ws/algorithms/filter/?"
-            "elements=X&elements=Y&elements=Z&format=iaga2002&id=J47A&type=variation"
-            "&starttime=2026-06-29T00:00:00.000Z&endtime=2026-06-29T03:00:00.000Z"
-            "&output_sampling_period=0.1"),
-        max_num_retries=0,
-        timeout_content=b"HTTP/1.1 408 Request Timeout") # timeout=3

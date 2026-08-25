@@ -3,8 +3,10 @@ gmag_retrieve_alternate
 
 retrieves GMAG data from alternate sources to supplement AE index calculation
 """
+import sys
+from typing import TextIO
+import shutil
 import datetime as dt
-from thmsoc.url_retrieve_file import url_retrieve_file
 from pathlib import Path
 import tomli
 import obspy
@@ -12,11 +14,9 @@ from obspy.clients.fdsn import Client as fdsn_client
 from obspy.clients.fdsn.header import FDSNNoDataException
 from obspy.clients.fdsn.header import FDSNException
 from obspy import UTCDateTime
-from thmsoc import simple_daterange
 from urllib3 import BaseHTTPResponse
-import shutil
-from typing import TextIO
-
+from thmsoc import simple_daterange
+from thmsoc import url_retrieve_file
 
 def midcenlon_to_tenthsmineast(midcenlon_deg):
     if midcenlon_deg < 0:
@@ -210,11 +210,7 @@ def retrieve_alt_file(
                     mirror_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copy(output_filepath,mirror_dir / f"{fn_out}")
         return retrieval_attempt_result
-    except ValueError as error:
-        print(error.args[0] + " File could not be written; Aborting file retrieval...")
-        #out_dict["error_status"] = error.args[1]
-        retrieval_attempt_result["error_status"] = error.args[1]
-    except TypeError as error:
+    except ValueError|TypeError as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
         #out_dict["error_status"] = error.args[1]
         retrieval_attempt_result["error_status"] = error.args[1]
@@ -226,76 +222,85 @@ def run_gmag_retrieve_alternate(
         end_date: str,
         mirror_dir:str | Path | None = None,
         issue_list_fp: str | Path | None = None):
-    import sys
-    # Set line buffering to avoid long pauses when viewing output with 'tail'
-    if not isinstance(sys.stdout,TextIO):
-        sys.stdout.reconfigure(line_buffering=True)
-    else:
-        raise TypeError("stdout must not be TextIO (requires reconfigure attribute)")
-
-    main_start_time = dt.datetime.now()
-    str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
-    
-    thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
-    thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
     try:
-        with open(thmsoc_python_config, "rb") as f:
-            toml_dict = tomli.load(f)
-            OUTPUT_DATAROOT = Path(toml_dict["paths"]["output_dataroot"])
-    except FileNotFoundError:
-        OUTPUT_DATAROOT = Path("/disks/themisdata")
-    
-    if type(station_code) == str:
-        scodes = [station_code]
-    else:
-        scodes = station_code
-    
-    dt_start_date = dt.datetime.strptime(start_date,'%Y-%m-%d')
-    dt_end_date = dt.datetime.strptime(end_date,'%Y-%m-%d')
-    missing_file_list = ""
-    for scode in scodes:
-        result_dict = {"error_status":""}
-        match scode:
-            case "lrv":
-                # use monthly mode:
-                dates_monthly_unsorted = []
-                for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
-                    dates_monthly_unsorted.append(dt.datetime.strptime(current_date.strftime("%Y-%m-01"),"%Y-%m-%d"))
-                dates_monthly = sorted(set(dates_monthly_unsorted))
-                #dates_monthly = sorted(set([dt.datetime.strptime(x.strftime("%Y-%m-01"),"%Y-%m-%d") for x in dates_daily]))
-                for current_date in dates_monthly:
-                    result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
-                    if result_dict["error_status"] != "":
-                        missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-            case _:
-                # use daily mode:    
-                for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
-                    result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
-                    if result_dict["error_status"] != "":
-                        missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-    if missing_file_list != "":
-        print("Retrieval was attempted for the following files, but failed for the following reasons: ")
-        print(missing_file_list)
-        # Make directory if it doesn't exist:
-        if (issue_list_fp is not None) and (issue_list_fp != ""):
-            if isinstance(issue_list_fp,str):
-                failed_list_fp = Path(issue_list_fp)
-            else:
-                failed_list_fp = issue_list_fp
+        # Set line buffering to avoid long pauses when viewing output with 'tail'
+        if not isinstance(sys.stdout,TextIO):
+            sys.stdout.reconfigure(line_buffering=True)
         else:
-            failed_list_p = OUTPUT_DATAROOT.joinpath('process_logs','gmag','webdownloads','mag','alt_remote_sources')
-            failed_list_p.mkdir(parents=True, exist_ok=True)
-            failed_list_fp = failed_list_p.joinpath(f"failed_list{str_datetime_run}.txt")
-        # Create file and print missing file list to file:
-        failed_list_fp.unlink(missing_ok=True)
-        failedf = open(failed_list_fp, "x")
-        failedf.close()
-        with open(failed_list_fp, "a") as of:
-            print(missing_file_list, file=of)
-        print(f"Wrote missing files to: {failed_list_fp}")
-        return 1
-    else:
-        return 0
+            raise TypeError("stdout must not be TextIO (requires reconfigure attribute)")
+
+        main_start_time = dt.datetime.now()
+        str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
+        
+        thmsoc_python_root = Path(__file__).resolve().parent.parent.parent
+        thmsoc_python_config = thmsoc_python_root / "thmsoc_python_config.toml"
+        try:
+            with open(thmsoc_python_config, "rb") as f:
+                toml_dict = tomli.load(f)
+                OUTPUT_DATAROOT = Path(toml_dict["paths"]["output_dataroot"])
+        except FileNotFoundError:
+            OUTPUT_DATAROOT = Path("/disks/themisdata")
+        
+        if type(station_code) == str:
+            scodes = [station_code]
+        else:
+            scodes = station_code
+        
+        dt_start_date = dt.datetime.strptime(start_date,'%Y-%m-%d')
+        dt_end_date = dt.datetime.strptime(end_date,'%Y-%m-%d')
+        missing_file_list = ""
+        critical_error=False
+        for scode in scodes:
+            result_dict = {"error_status":""}
+            match scode:
+                case "lrv":
+                    # use monthly mode:
+                    dates_monthly_unsorted = []
+                    for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
+                        dates_monthly_unsorted.append(dt.datetime.strptime(current_date.strftime("%Y-%m-01"),"%Y-%m-%d"))
+                    dates_monthly = sorted(set(dates_monthly_unsorted))
+                    #dates_monthly = sorted(set([dt.datetime.strptime(x.strftime("%Y-%m-01"),"%Y-%m-%d") for x in dates_daily]))
+                    for current_date in dates_monthly:
+                        result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
+                        if result_dict["error_status"] != "":
+                            missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
+                            if result_dict["error_status"] not in ["No data for this date"]:
+                                critical_error = True
+                case _:
+                    # use daily mode:    
+                    for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
+                        result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
+                        if result_dict["error_status"] != "":
+                            missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
+                            critical_error = True
+        if missing_file_list != "":
+            print("Retrieval was attempted for the following files, but failed for the following reasons: ")
+            print(missing_file_list)
+            # Make directory if it doesn't exist:
+            if (issue_list_fp is not None) and (issue_list_fp != ""):
+                if isinstance(issue_list_fp,str):
+                    failed_list_fp = Path(issue_list_fp)
+                else:
+                    failed_list_fp = issue_list_fp
+            else:
+                failed_list_p = OUTPUT_DATAROOT.joinpath('process_logs','gmag','webdownloads','mag','alt_remote_sources')
+                failed_list_p.mkdir(parents=True, exist_ok=True)
+                failed_list_fp = failed_list_p.joinpath(f"failed_list{str_datetime_run}.txt")
+            # Create file and print missing file list to file:
+            failed_list_fp.unlink(missing_ok=True)
+            failedf = open(failed_list_fp, "x")
+            failedf.close()
+            with open(failed_list_fp, "a") as of:
+                print(missing_file_list, file=of)
+            print(f"Wrote missing files to: {failed_list_fp}")
+            if critical_error:
+                sys.exit(3)
+            else:
+                sys.exit(2)
+        else:
+            sys.exit(0)
+    except:
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_gmag_retrieve_alternate(station_code=["lrv"],start_date="2026-01-01",end_date="2026-02-01")

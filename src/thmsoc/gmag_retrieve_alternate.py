@@ -211,10 +211,13 @@ def retrieve_alt_file(
                     mirror_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copy(output_filepath,mirror_dir / f"{fn_out}")
         return retrieval_attempt_result
-    except ValueError|TypeError as error:
+    except (ValueError,TypeError) as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
         #out_dict["error_status"] = error.args[1]
-        retrieval_attempt_result["error_status"] = error.args[1]
+        if len(error.args) > 1:
+            retrieval_attempt_result["error_status"] = error.args[1]
+        else:
+            raise ValueError("Error message did not contain error status in second element.")
     return retrieval_attempt_result
 
 def run_gmag_retrieve_alternate(

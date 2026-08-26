@@ -268,15 +268,17 @@ def run_gmag_retrieve_alternate(
                         result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
                         if result_dict["error_status"] != "":
                             missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-                            if result_dict["error_status"] not in ["No data for this date"]:
-                                critical_error = True
+                            # Treat all errors as critical:
+                            critical_error = True    
                 case _:
                     # use daily mode:    
                     for current_date in simple_daterange(start = dt_start_date, end = dt_end_date):
                         result_dict = retrieve_alt_file(scode=scode, date=current_date, data_root=OUTPUT_DATAROOT,mirror_dir=mirror_dir)
                         if result_dict["error_status"] != "":
                             missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
-                            critical_error = True
+                            # Ignore issues due to missing data:
+                            if result_dict["error_status"] not in ["No data for this date"]:
+                                critical_error = True
         if missing_file_list != "":
             print("Retrieval was attempted for the following files, but failed for the following reasons: ")
             print(missing_file_list)

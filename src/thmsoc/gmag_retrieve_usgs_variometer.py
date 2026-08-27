@@ -115,7 +115,9 @@ def get_source_alias(station_code:str) -> str:
         station_name_sourcealias = station_code
     return station_name_sourcealias
 
-def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime):
+def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime) -> bool:
+    # TODO: remove return True and update once new service is online
+    return True
     print("Checking "+ station_code.upper() +" availability for date: " + data_date.strftime('%Y-%m-%d') + "...") 
     avail_netloc='service.earthscope.org' 
     avail_path='/fdsnws/availability/1/extent'
@@ -160,24 +162,27 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
             ]) # omitting ('channel','BF?'), for now, until earthscope fixes indexing issue
     # Attempt to make url request: 
     try:
-        url_response_bytes = urllib3.request(
-            "GET", 
-            url, 
-            retries=0,
-            decode_content=False,
-            preload_content=False,
-            redirect=False,
-            timeout=20)
-        url_resp_str = decode2string(url_response_bytes)
-    except urllib3.exceptions.TimeoutError:
-        print("ERROR: Connection timed out! Calibration date could not be determined.")
+        try:
+            url_response_bytes = urllib3.request(
+                "GET", 
+                url, 
+                retries=0, # change to 2
+                decode_content=False,
+                preload_content=False,
+                redirect=False,
+                timeout=20)
+            url_resp_str = decode2string(url_response_bytes)
+            # If we get a bad response, exit with an error status
+            if url_response_bytes.status != 200:
+                raise Exception("Invalid status returned: " + str(url_response_bytes.status) + ".")
+        except urllib3.exceptions.TimeoutError:
+            raise Exception("Connection timed out!")
+        except urllib3.exceptions.MaxRetryError:
+            raise Exception("Max retries reached!")
+    except Exception as error:
+        print(F"ERROR! {error.args[0]} Calibration date could not be determined. Returning blank entry.")
         return ""
-    else:
-        # If we get a bad response, exit with an error status
-        if url_response_bytes.status != 200:
-            print("ERROR: Invalid status returned: " + str(url_response_bytes.status) + ". Calibration date could not be determined.")
-            return ""
-    
+
     root=ET.fromstring(url_resp_str)
     
     change_datetimes = []
@@ -665,4 +670,4 @@ def run_gmag_retrieve_usgs_variometer(
         return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_usgs_variometer(start_date="2025-11-17",end_date="2025-11-17", station_list=['s61a'],sampling_rate='10')
+    run_gmag_retrieve_usgs_variometer(start_date="2026-07-18",end_date="2026-07-18", station_list=['anmo'],sampling_rate='10')

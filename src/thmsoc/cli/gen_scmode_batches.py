@@ -12,7 +12,7 @@ from thmsoc.arguments import add_probe_arguments, expand_probe_arguments
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line argument parser."""
     p = argparse.ArgumentParser(
-        description="Create IDL batch files for processing THEMIS L2 products."
+        description="Create IDL batch files for processing THEMIS L1 SCMODE products."
     )
 
     # Specify date range arguments

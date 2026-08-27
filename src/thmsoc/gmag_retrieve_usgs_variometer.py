@@ -630,7 +630,7 @@ def run_gmag_retrieve_usgs_variometer(
             # Initialize dictionary containing results of attempted retrieval for given station and date:
             result_dict = {"LastAttemptedAccessTime":"","LastSuccessfulAccessTime":"","error_status":""}
             # If file is available, for given station and date, attempt to retrieve it:
-            if get_usgs_variometer_avail(station_code,current_date):
+            if True: # get_usgs_variometer_avail(station_code,current_date)
                 result_dict = retrieve_a_file(
                     station_code=station_code,
                     data_date=current_date,

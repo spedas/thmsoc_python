@@ -2,3 +2,17 @@
 input_dataroot = "/disks/themisdata"
 output_dataroot = "/disks/themisdata"
 temproot = "/mydisks/home/thmsoc/thmsoc_python"
+
+[idl]
+executable = "/disks/apollo/export/idl_9.2/idl/bin/idl"
+startup = "/disks/socware/thmsoc_dp_current/idl/thmsoc/custom_overplot_startup.pro"
+path = [
+    "+/disks/apollo/export/idl_9.2/idl/lib",
+    "+/disks/socware/thmsoc_dp_current/idl",
+]
+
+[environment]
+THEMIS_DATA_DIR = "/disks/themisdata"
+IDL_DLM_PATH = "/home/thmsoc/idl_dlm:<IDL_DEFAULT>"
+IDL_DEVICE = "Z"
+IDL_UPDATE_CHECK = "0"

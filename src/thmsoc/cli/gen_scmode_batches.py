@@ -1,25 +1,25 @@
 
-# src/thmsoc/cli/gen_summary_plot_batches.py
+# src/thmsoc/cli/generate_reprocess_l2_batches.py
 import argparse
 import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
-from thmsoc.gen_summary_plot_batches import make_plot_batches
+from thmsoc import make_scmode_batches
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
-from thmsoc.arguments import add_summary_plot_arguments, expand_summary_plot_arguments
+from thmsoc.arguments import add_l2_arguments, expand_l2_arguments
 from thmsoc.arguments import add_probe_arguments, expand_probe_arguments
 
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line argument parser."""
     p = argparse.ArgumentParser(
-        description="Create IDL batch files for processing THEMIS summary plots."
+        description="Create IDL batch files for processing THEMIS L1 SCMODE products."
     )
 
     # Specify date range arguments
     add_trange_arguments(p)
 
-    # Specify L2 data type arguments
-    add_summary_plot_arguments(p)
+    # Specify probe arguments
+    add_probe_arguments(p)
 
     # Specify days per batch argument
     p.add_argument("-b", "--batch_days", help="Days per batch to process", type=int, default=1)
@@ -37,18 +37,11 @@ def main() -> int:
     # Check arguments
     check_trange_arguments(args)
 
-    # Expand L2 types in case 'all' was specified
-    summary_plot_types = expand_summary_plot_arguments(args)
+    # Expand probes in case 'all' was specified
+    probes = expand_probe_arguments(args)
 
-    # Run the report
-    make_plot_batches(
-        start_date=args.start_date,
-        end_date=args.end_date,
-        days=args.days,
-        days_per_batch=args.batch_days,
-        summary_plot_types=summary_plot_types,
-        output_directory=args.output_directory
-    )
+    # Generate the products
+    make_scmode_batches(start_date=args.start_date, end_date=args.end_date, days=args.days, days_per_batch=args.batch_days, probes=probes, output_directory=args.output_directory)
 
     return 0
 

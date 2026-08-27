@@ -29,6 +29,14 @@ gen_summary_plot_batches
    :func: build_parser
    :prog: gen_summary_plot_batches
 
+gen_scmode_batches
+--------------
+
+.. argparse::
+   :module: thmsoc.cli.gen_scmode_batches
+   :func: build_parser
+   :prog: gen_scmode_batches
+
 gmag_retrieve_usgs_variometer
 -----------------------------
 

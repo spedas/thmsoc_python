@@ -16,7 +16,7 @@ def make_scmode_batches(start_date, end_date, days, days_per_batch, probes, outp
                 basename = f"batch_{batch_dates[0]}_probe_{probe}.bm"
                 batchfile_path = output_path / basename
                 with open(batchfile_path,'w') as f:
-                    f.write(f"thm_reprocess_scmode_days,{batch_dates},'{probe}'\n")
+                    f.write(f"thm_scmode_reprocess_days,{batch_dates},'{probe}'\n")
                     f.write(f"exit\n",)
                 m.write(f"{basename}\n")
 

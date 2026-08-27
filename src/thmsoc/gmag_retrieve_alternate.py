@@ -306,6 +306,8 @@ def run_gmag_retrieve_alternate(
                 sys.exit(0)
         else:
             sys.exit(0)
+    except SystemExit as ecode:
+        sys.exit(ecode.args[0])
     except:
         sys.exit(1)
 

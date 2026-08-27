@@ -8,7 +8,6 @@ from typing import TextIO
 import shutil
 import datetime as dt
 from pathlib import Path
-#import tomllib as tomli
 import tomli
 import obspy
 from obspy.clients.fdsn import Client as fdsn_client
@@ -210,6 +209,7 @@ def retrieve_alt_file(
                     mirror_dir = mirror_dir / f"{date.strftime('%Y')}" / f"{date.strftime('%m')}"
                     mirror_dir.mkdir(parents=True, exist_ok=True)
                     shutil.copy(output_filepath,mirror_dir / f"{fn_out}")
+        print("Retrieval successful.")
         return retrieval_attempt_result
     except (ValueError,TypeError) as error:
         print(error.args[0] + " File could not be written; Aborting file retrieval...")
@@ -278,6 +278,7 @@ def run_gmag_retrieve_alternate(
                             missing_file_list += "Station: " + (scode.upper() + ",").ljust(5) + " Date: "+ current_date.strftime('%Y-%m-%d') +", Issue: " + result_dict["error_status"] + "\n"
                             # Ignore issues due to missing data:
                             if result_dict["error_status"] not in ["No data for this date"]:
+                                print(f"Critical error found: {result_dict["error_status"]}")
                                 critical_error = True
         if missing_file_list != "":
             print("Retrieval was attempted for the following files, but failed for the following reasons: ")
@@ -309,4 +310,4 @@ def run_gmag_retrieve_alternate(
         sys.exit(1)
 
 if __name__ == "__main__":
-    run_gmag_retrieve_alternate(station_code=["lrv"],start_date="2026-01-01",end_date="2026-02-01")
+    run_gmag_retrieve_alternate(station_code=["snkq","lrv"],start_date="2026-01-01",end_date="2026-01-03")

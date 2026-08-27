@@ -1,3 +1,4 @@
+import sys
 from cdflib import cdfwrite
 from cdflib import cdfread
 from pathlib import Path
@@ -285,6 +286,10 @@ def cdf_get_struct(cdf_path:Path,cdf_path_override:Path | None = None,skip_var_c
                 cdf_metadata["Variables"][zvar] = set_cdf_variable(var_dict)
             else:
                 cdf_metadata["Variables"][zvar] = var_dict
+    if cdf_metadata["GlobalAttrs"]["Logical_file_id"][0] == " ":
+        # Logical File ID should just be the file name without the file type extension
+        print(f"WARNING: Loaded CDF structure has empty Logical File ID! Using filepath stem: {cdf_metadata["CDFInfo"]["CDF"].stem}")
+        cdf_metadata["GlobalAttrs"]["Logical_file_id"][0] = cdf_metadata["CDFInfo"]["CDF"].stem
     if cdf_path_override is not None:
         cdf_metadata["CDFInfo"]["CDF"] = cdf_path_override
     return cdf_metadata
@@ -293,6 +298,7 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
     """
     Update CDF dictionary recursively using update instructions. Returns updated CDF dictionary.
     """
+    
     for update_action in updates.keys():
         update_action_obj=updates[update_action]
         match update_action:
@@ -307,8 +313,8 @@ def cdf_update_struct(cdf_struct:dict,updates:dict) -> dict:
                 new_changes["update_attr"]["global"].update({"Logical_source":new_logicalsource})
 
                 if cdf_struct["GlobalAttrs"]["Logical_file_id"][0] == " ":
+                    # should not be reached since cdf_struct load routine generates one if it's blank 
                     raise ValueError("Logical file ID is blank!")
-                # Set default logical file ID if not found while loading structure?
                 if old_logicalsource in cdf_struct["GlobalAttrs"]["Logical_file_id"][0]:
                     id_suffix = (cdf_struct["GlobalAttrs"]["Logical_file_id"][0].split(old_logicalsource))[-1]
                     new_changes["update_attr"]["global"].update({"Logical_file_id":new_logicalsource+id_suffix})
@@ -559,6 +565,11 @@ def cdf_generate(
     # Update the CDF dictionary using the updates dictionary
     output_cdf_struct = cdf_update_struct(output_cdf_struct,updates)
 
+    # Check for duplicate attribute names (case insensitive)
+    attr_list_lower = [list(attr_dict.keys())[0].lower() for attr_dict in output_cdf_struct["CDFInfo"]["Attributes"]]
+    if len(attr_list_lower) != len(set(attr_list_lower)):
+        raise AssertionError(f"{output_cdf_fp.name} has a duplicate attribute name in CDF structure! Check case of attribute letters.")
+
     overwrite_CDF = False
     output_cdf_tmp_fp = Path("")
     # If the target CDF already exists, move it to the temporary directory for safekeeping.
@@ -596,19 +607,20 @@ def cdf_generate(
                     var_data=output_cdf_struct["Variables"][var]["VarData"])
             # Finally, close the newly written CDF: 
             cdf_output.close()
+        print(f"{output_cdf_fp.name} has been generated! Validating...")
         # The updated CDF should currently be in the target directory
         # Verify update worked correctly; if update failed, delete new CDF in target directory and move old CDF back to target directory, if it existed:
         updated_cdf_struct = cdf_get_struct(output_cdf_fp)
         if dict_equals(output_cdf_struct,updated_cdf_struct,"output_cdf_struct","updated_cdf_struct",verbose=True):
-            print("CDF passed verification check!")
+            print(f"{output_cdf_fp.name} passed verification check!")
             # If original CDF was saved to the processing directory, it can now be removed
             if overwrite_CDF:
-                print("Removing original CDF from temporary processing directory...")
+                print(f"Removing original copy of {output_cdf_fp.name} from temporary processing directory...")
                 output_cdf_tmp_fp.unlink()
         else:
-            raise ValueError("CDF failed verification check")    
+            raise ValueError(f"Generated {output_cdf_fp.name} failed verification check")    
         return
-    except ValueError as error:
+    except Exception as error:
         # Remove new file in target directory:
         output_cdf_fp.unlink()
         # If original CDF was saved to the processing directory, move it back to the target directory:
@@ -616,17 +628,17 @@ def cdf_generate(
             shutil.move(
                 src=output_cdf_tmp_fp,
                 dst=output_cdf_fp)
-        raise ValueError(f"CDF Update Failed! Reason: {error}. Removing temporary CDF file...")
+        raise Exception(f"CDF Update Failed! Reason: {error.args[0]}. Removing temporary CDF file...")
 
 def cdf_load_and_generate(outputcdf_fp:str | Path, mastercdf_fp:str | Path | None = None, updates:dict = {}):
     if isinstance(outputcdf_fp,str):
         outputcdf_fp=Path(outputcdf_fp)
     if outputcdf_fp.exists():
-        print("CDF exists; getting existing CDF structure...")
+        print(f"{outputcdf_fp.name} exists; getting existing CDF structure...")
         # get outputcdf data
         cdf_output = cdf_get_struct(outputcdf_fp)
     else:
-        print("CDF does not exist; using mastercdf struct as template...")
+        print(f"{outputcdf_fp.name} does not exist; attempting to use mastercdf as template...")
         if mastercdf_fp is not None:
             if isinstance(mastercdf_fp,str):
                 mastercdf_fp = Path(mastercdf_fp)
@@ -634,11 +646,11 @@ def cdf_load_and_generate(outputcdf_fp:str | Path, mastercdf_fp:str | Path | Non
             raise ValueError("ERROR! Target CDF does not exist, but mastercdf_fp is not provided! Please provide a filepath to the mastercdf so that a CDF can be created from it.")
         if not mastercdf_fp.exists():
             raise ValueError("ERROR! mastercdf_fp does not point to a valid existing filepath! Please check that the mastercdf_fp is correct.")
-        print("Getting mastercdf struct...")
+        #print("Getting mastercdf struct...")
         cdf_master = cdf_get_struct(mastercdf_fp,cdf_path_override=outputcdf_fp)
         # set outputcdf data as mastercdf data
         cdf_output = cdf_master.copy()
-    print(f"Generating new CDF for {str(outputcdf_fp)}...")
+    print(f"Generating new CDF for {outputcdf_fp.name}...")
     cdf_generate(
         output_cdf_struct=cdf_output,
         updates=updates)
@@ -673,123 +685,123 @@ def cdf_updater(
     num_parallel_jobs : int = 1
         Specifies the max number of jobs to run in parallel; defaults to 1 if the provided value is less than 1
     """
-    try:
-        if outputcdflist_fp is None:
-            # If output CDF path not provided, use mastercdf path instead
-            if outputcdf_fp is None:
-                print("Output CDF filepath not provided; updating mastercdf in-place instead...")
-                if mastercdf_fp is not None:
-                    if isinstance(mastercdf_fp,str):
-                        mastercdf_fp = Path(mastercdf_fp)
-                        outputcdf_fp = mastercdf_fp
-                else:
-                    # If neither CDF paths have been passed, throw error: 
-                    raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+    #try:
+    output_filelist = []
+    if outputcdflist_fp is None:
+        # If output CDF path not provided, use mastercdf path instead
+        if outputcdf_fp is None:
+            print("Output CDF filepath not provided; updating mastercdf in-place instead...")
+            if mastercdf_fp is not None:
+                if isinstance(mastercdf_fp,str):
+                    mastercdf_fp = Path(mastercdf_fp)
+                    outputcdf_fp = mastercdf_fp
+            else:
+                # If neither CDF paths have been passed, throw error: 
+                raise ValueError("ERROR! Either the mastercdf_fp or the outputcdf_fp must be provided!")
+    else:
+        if isinstance(outputcdflist_fp,str):
+            outputcdflist_fp = Path(outputcdflist_fp)
+        with open(outputcdflist_fp, 'r') as file:
+            # Read all lines into a list
+            output_filelist = file.readlines()
+    # If output CDF path not passed as list, cast as list:
+    if isinstance(outputcdf_fp,(str,Path)):
+        output_filelist = [outputcdf_fp]
+    if len(output_filelist) == 0:
+        raise ValueError("Output list has no entries. The output paths were not set properly.")
+    max_workers=1
+    if (len(output_filelist) > 1) and (num_parallel_jobs > 1):
+        max_workers = num_parallel_jobs
+    print(f"Updating {len(output_filelist)} CDF(s) in {max_workers} job(s)...")
+    try: 
+        if max_workers==1:
+            for outputcdf_fp_current in output_filelist:
+                cdf_load_and_generate(
+                    outputcdf_fp=outputcdf_fp_current,
+                    mastercdf_fp=mastercdf_fp,
+                    updates=updates)
         else:
-            if isinstance(outputcdflist_fp,str):
-                outputcdflist_fp = Path(outputcdflist_fp)
-            with open(outputcdflist_fp, 'r') as file:
-                # Read all lines into a list
-                output_filelist = file.readlines()
-        # If output CDF path not passed as list, cast as list:
-        if isinstance(outputcdf_fp,(str,Path)):
-            output_filelist = [outputcdf_fp]
-        # Should be list:
-        if isinstance(outputcdf_fp,list):
-            output_filelist = outputcdf_fp    
-        else:
-            raise ValueError("Outputcdf_fp should be cast to list but was not")
-        print("Updating CDFs...")
-        max_workers=1
-        if num_parallel_jobs > 1:
-            max_workers = num_parallel_jobs
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures_iterable = [executor.submit(
-                cdf_load_and_generate,
-                outputcdf_fp=outputcdf_fp_current,
-                mastercdf_fp=mastercdf_fp,
-                updates=updates) for outputcdf_fp_current in output_filelist]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures_iterable = [executor.submit(
+                    cdf_load_and_generate,
+                    outputcdf_fp=outputcdf_fp_current,
+                    mastercdf_fp=mastercdf_fp,
+                    updates=updates) for outputcdf_fp_current in output_filelist]
         print("Done!")
-        return 0
-    except:
-        return 1 
+        sys.exit(0)
+    except Exception as error:
+        print(f"ERROR: {error}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf").unlink(missing_ok=True)
-    Path("C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf").unlink(missing_ok=True)
-    #cdf_updater(
-    #    mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_00000000_v01.cdf", 
-    #    outputcdf_fp=["C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_lrv_1min_00000000_v01.cdf"], 
-    #    updates={
-    #        "update_logicalsource":"thg_l2_mag_lrv_1min",
-    #        "update_attr":{
-    #            "global":{
-    #                'Time_resolution':'1 minute',
-    #                'Generation_date':'2026-07-28',
-    #                'spase_DatasetResourceID':'',
-    #                'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
-    #                'MODS':'Rev-2026-07-28 (dcarpenter): CDF template created.'
-    #            }
-    #        }
-    #    })
-    
-    # "C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_1min_00000000_v01.cdf",
-    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf").unlink(missing_ok=True)
-    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf").unlink(missing_ok=True)
-    #Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf").unlink(missing_ok=True)
-    
-    #shutil.copy(
-    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
-    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf")
-    #shutil.copy(
-    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
-    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf")
-    #shutil.copy(
-    #    src="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/original_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf",
-    #    dst="C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf")
+    # Remove old mastercdf if it exists:
+    mastercdf_dir = "C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg"
+    path_lrv_old = f"{mastercdf_dir}/thg_l2_mag_lrv_00000000_v01.cdf"
+    path_lrv_new = f"{mastercdf_dir}/thg_l2_mag_lrv_1min_00000000_v01.cdf"
+    path_snkq_old = f"{mastercdf_dir}/thg_l2_mag_snkq_00000000_v01.cdf"
+    path_snkq_new = f"{mastercdf_dir}/thg_l2_mag_snkq_1min_00000000_v01.cdf"
 
-    old_cdf_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf"),skip_var_cast=True)
-    
-    cdf_updater(
-        mastercdf_fp="C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg/thg_l2_mag_snkq_00000000_v01.cdf", 
-        outputcdf_fp=[
-            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf",
-            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260117_v01.cdf",
-            "C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260118_v01.cdf"],
-        updates={
-            "update_logicalsource":"thg_l2_mag_snkq_1min",
-            "rename_attr":{
-                "global":{
-                    "Spase_datasetresourceid":"spase_DatasetResourceID"
+    Path(path_lrv_new).unlink(missing_ok=True)
+    try:
+        # Re-create it using cdf_updater:
+        cdf_updater(
+            mastercdf_fp=path_lrv_old, 
+            outputcdf_fp=path_lrv_new, 
+            updates={
+                "update_logicalsource":"thg_l2_mag_lrv_1min",
+                "update_attr":{
+                    "global":{
+                        'Time_resolution':'1 minute',
+                        'Generation_date':'20260827',
+                        'spase_DatasetResourceID':' ',
+                        'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
+                        'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
+                        'TEXT':'Ground based observatory, affiliated with Science Institute, University of Iceland. Data is preliminary 1 minute resolution data.'   
+                    },
+                    "thg_mag_lrv_1min_compno":{
+                        'CATDESC':'Array containing index of H (North), E (East), and Z (vertically down) magnetic field components.',
+                        'FIELDNAM':'HEZ Component Number'
+                    },
+                    "thg_mag_lrv_1min_time":{
+                        'CATDESC':'UTC time, measured in seconds, since 01-Jan-1970 00:00:00',
+                        'FIELDNAM':'Time'
+                    }
                 }
-            },
-            "update_attr":{
-                "global":{
-                    "Time_resolution":"1 minute",
-                    "Generation_date":"20260812",
-                    "spase_DatasetResourceID":"",
-                    "Logical_source_description":"Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network",
-                    "MODS":"Rev-2026-08-12 (dcarpenter): CDF template created."
+            })
+    except SystemExit as exitstatus:
+        print(f"LRV update returned exitstatus {exitstatus}")
+    # Do the same for SNKQ
+    Path(path_snkq_new).unlink(missing_ok=True)
+    try:
+        cdf_updater(
+            mastercdf_fp=path_snkq_old, 
+            outputcdf_fp=path_snkq_new,
+            updates={
+                "update_logicalsource":"thg_l2_mag_snkq_1min",
+                "update_attr":{
+                    "global":{
+                        'Time_resolution':'1 minute',
+                        'Generation_date':'20260827',
+                        'spase_DatasetResourceID':' ',
+                        'Logical_source_description':'Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network',
+                        'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
+                        'TEXT':'THEMIS Ground Based Observatory part of the THEMIS GBO effort. Retrieved via NRCAN FDSN web service. Data transmitted via GOES Primary.'
+                    },
+                    'thg_magh_snkq_1min':{
+                        'DISPLAY_TYPE':'time_series>y=thg_magh_snkq_1min(0)',
+                    },
+                    'thg_magd_snkq_1min':{
+                        'DISPLAY_TYPE':'time_series>y=thg_magd_snkq_1min(0)',
+                    },
+                    'thg_magz_snkq_1min':{
+                        'DISPLAY_TYPE':'time_series>y=thg_magz_snkq_1min(0)',
+                    }
                 }
-            }
-        })
-
-    new_cdf_struct = cdf_get_struct(Path("C:/Users/DC/Documents/Projects/thmsoc_python_tasks/task_9/updated_copies/thg_l2_mag_snkq_1min_20260116_v01.cdf"),skip_var_cast=True)
-
-    dict_equals(
-        dict1=old_cdf_struct,
-        dict2=new_cdf_struct,
-        name1="old_cdf_struct",
-        name2="new_cdf_struct",
-        verbose=True)
-
-    print("Done!")
-
-    #"rename_var":{"thg_magh_snkq":"thg_magh_snkq_1min","thg_magd_snkq":"thg_magd_snkq_1min","thg_magz_snkq":"thg_magz_snkq_1min"},
-                
-                
-    #Path("C:/Users/DC/Documents/Projects/tracers_mag_L2_tasks/task_1/ts2_l2_mag_bdc-16sps_00000000_v1.0.0.cdf").#unlink(missing_ok=True)
-    #cdf_updater(
-    #    mastercdf_fp="C:/Users/DC/Documents/Projects/tracers_mag_L2/mastercdf/ts2_l2_mag_bdc-16sps_00000000_v1.0.#0.cdf",
-    #    outputcdf_fp="C:/Users/DC/Documents/Projects/tracers_mag_L2_tasks/task_1/ts2_l2_mag_bdc-16sps_00000000_v1.#0.0.cdf"
-    #)
+            })
+    except SystemExit as exitstatus:
+        print(f"SNKQ update returned exitstatus {exitstatus}")
+    print("Loading new LRV structure:")
+    lrv_struct = cdf_get_struct(cdf_path=Path(path_lrv_new))
+    print("Loading new SNKQ structure:")
+    snkq_struct = cdf_get_struct(cdf_path=Path(path_snkq_new))
+    print("Main method done!")

@@ -1,4 +1,3 @@
-import sys
 from cdflib import cdfwrite
 from cdflib import cdfread
 from pathlib import Path
@@ -661,7 +660,7 @@ def cdf_updater(
         outputcdflist_fp: str | Path | None = None,
         mastercdf_fp: str | Path | None = None, 
         updates: dict = {},
-        num_parallel_jobs: int = 1) -> int:
+        num_parallel_jobs: int = 1):
     """
     Generates one or more CDF file(s) by using an existing CDF (or mastercdf) file as a template, copying the CDF file's contents, and then by applying changes specified by a structure containing update instructions. Creates updated file in temporary directory to prevent file overwrites in the event of update errors. If no update errors detected, moves file from temporary directory to destination directory. 
 
@@ -713,25 +712,21 @@ def cdf_updater(
     if (len(output_filelist) > 1) and (num_parallel_jobs > 1):
         max_workers = num_parallel_jobs
     print(f"Updating {len(output_filelist)} CDF(s) in {max_workers} job(s)...")
-    try: 
-        if max_workers==1:
-            for outputcdf_fp_current in output_filelist:
-                cdf_load_and_generate(
-                    outputcdf_fp=outputcdf_fp_current,
-                    mastercdf_fp=mastercdf_fp,
-                    updates=updates)
-        else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures_iterable = [executor.submit(
-                    cdf_load_and_generate,
-                    outputcdf_fp=outputcdf_fp_current,
-                    mastercdf_fp=mastercdf_fp,
-                    updates=updates) for outputcdf_fp_current in output_filelist]
-        print("Done!")
-        sys.exit(0)
-    except Exception as error:
-        print(f"ERROR: {error}")
-        sys.exit(1)
+    if max_workers==1:
+        for outputcdf_fp_current in output_filelist:
+            cdf_load_and_generate(
+                outputcdf_fp=outputcdf_fp_current,
+                mastercdf_fp=mastercdf_fp,
+                updates=updates)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures_iterable = [executor.submit(
+                cdf_load_and_generate,
+                outputcdf_fp=outputcdf_fp_current,
+                mastercdf_fp=mastercdf_fp,
+                updates=updates) for outputcdf_fp_current in output_filelist]
+    print("Done!")
+    return
 
 if __name__ == "__main__":
     # Remove old mastercdf if it exists:
@@ -742,64 +737,58 @@ if __name__ == "__main__":
     path_snkq_new = f"{mastercdf_dir}/thg_l2_mag_snkq_1min_00000000_v01.cdf"
 
     Path(path_lrv_new).unlink(missing_ok=True)
-    try:
-        # Re-create it using cdf_updater:
-        cdf_updater(
-            mastercdf_fp=path_lrv_old, 
-            outputcdf_fp=path_lrv_new, 
-            updates={
-                "update_logicalsource":"thg_l2_mag_lrv_1min",
-                "update_attr":{
-                    "global":{
-                        'Time_resolution':'1 minute',
-                        'Generation_date':'20260827',
-                        'spase_DatasetResourceID':' ',
-                        'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
-                        'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
-                        'TEXT':'Ground based observatory, affiliated with Science Institute, University of Iceland. Data is preliminary 1 minute resolution data.'   
-                    },
-                    "thg_mag_lrv_1min_compno":{
-                        'CATDESC':'Array containing index of H (North), E (East), and Z (vertically down) magnetic field components.',
-                        'FIELDNAM':'HEZ Component Number'
-                    },
-                    "thg_mag_lrv_1min_time":{
-                        'CATDESC':'UTC time, measured in seconds, since 01-Jan-1970 00:00:00',
-                        'FIELDNAM':'Time'
-                    }
+    # Re-create it using cdf_updater:
+    cdf_updater(
+        mastercdf_fp=path_lrv_old, 
+        outputcdf_fp=path_lrv_new, 
+        updates={
+            "update_logicalsource":"thg_l2_mag_lrv_1min",
+            "update_attr":{
+                "global":{
+                    'Time_resolution':'1 minute',
+                    'Generation_date':'20260827',
+                    'spase_DatasetResourceID':' ',
+                    'Logical_source_description':'Higher latitude chain (Lat 64.2, Long 338.3), Ground-based Vector Magnetic Field at Leirvogur, Iceland, 1 minute resolution data.',
+                    'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
+                    'TEXT':'Ground based observatory, affiliated with Science Institute, University of Iceland. Data is preliminary 1 minute resolution data.'   
+                },
+                "thg_mag_lrv_1min_compno":{
+                    'CATDESC':'Array containing index of H (North), E (East), and Z (vertically down) magnetic field components.',
+                    'FIELDNAM':'HEZ Component Number'
+                },
+                "thg_mag_lrv_1min_time":{
+                    'CATDESC':'UTC time, measured in seconds, since 01-Jan-1970 00:00:00',
+                    'FIELDNAM':'Time'
                 }
-            })
-    except SystemExit as exitstatus:
-        print(f"LRV update returned exitstatus {exitstatus}")
+            }
+        })
     # Do the same for SNKQ
     Path(path_snkq_new).unlink(missing_ok=True)
-    try:
-        cdf_updater(
-            mastercdf_fp=path_snkq_old, 
-            outputcdf_fp=path_snkq_new,
-            updates={
-                "update_logicalsource":"thg_l2_mag_snkq_1min",
-                "update_attr":{
-                    "global":{
-                        'Time_resolution':'1 minute',
-                        'Generation_date':'20260827',
-                        'spase_DatasetResourceID':' ',
-                        'Logical_source_description':'Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network',
-                        'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
-                        'TEXT':'THEMIS Ground Based Observatory part of the THEMIS GBO effort. Retrieved via NRCAN FDSN web service. Data transmitted via GOES Primary.'
-                    },
-                    'thg_magh_snkq_1min':{
-                        'DISPLAY_TYPE':'time_series>y=thg_magh_snkq_1min(0)',
-                    },
-                    'thg_magd_snkq_1min':{
-                        'DISPLAY_TYPE':'time_series>y=thg_magd_snkq_1min(0)',
-                    },
-                    'thg_magz_snkq_1min':{
-                        'DISPLAY_TYPE':'time_series>y=thg_magz_snkq_1min(0)',
-                    }
+    cdf_updater(
+        mastercdf_fp=path_snkq_old, 
+        outputcdf_fp=path_snkq_new,
+        updates={
+            "update_logicalsource":"thg_l2_mag_snkq_1min",
+            "update_attr":{
+                "global":{
+                    'Time_resolution':'1 minute',
+                    'Generation_date':'20260827',
+                    'spase_DatasetResourceID':' ',
+                    'Logical_source_description':'Higher latitude chain (Lat 56.5, Long 280.8), Ground-based Vector Magnetic Field at Sanikiluaq, Canada, 1 minute, CARISMA network',
+                    'MODS':'Rev-2026-08-27 (dcarpenter): CDF template created.',
+                    'TEXT':'THEMIS Ground Based Observatory part of the THEMIS GBO effort. Retrieved via NRCAN FDSN web service. Data transmitted via GOES Primary.'
+                },
+                'thg_magh_snkq_1min':{
+                    'DISPLAY_TYPE':'time_series>y=thg_magh_snkq_1min(0)',
+                },
+                'thg_magd_snkq_1min':{
+                    'DISPLAY_TYPE':'time_series>y=thg_magd_snkq_1min(0)',
+                },
+                'thg_magz_snkq_1min':{
+                    'DISPLAY_TYPE':'time_series>y=thg_magz_snkq_1min(0)',
                 }
-            })
-    except SystemExit as exitstatus:
-        print(f"SNKQ update returned exitstatus {exitstatus}")
+            }
+        })
     print("Loading new LRV structure:")
     lrv_struct = cdf_get_struct(cdf_path=Path(path_lrv_new))
     print("Loading new SNKQ structure:")

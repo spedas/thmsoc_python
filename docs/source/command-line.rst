@@ -5,6 +5,14 @@ Install the project before using these commands. Each section below is
 generated directly from the corresponding :mod:`argparse` parser, so it stays
 in sync with the command's ``--help`` output.
 
+cdf_updater
+-----------
+
+.. argparse::
+   :module: thmsoc.cli.cdf_updater
+   :func: build_parser
+   :prog: cdf_updater
+
 product_volume
 --------------
 
@@ -36,6 +44,13 @@ gen_scmode_batches
    :module: thmsoc.cli.gen_scmode_batches
    :func: build_parser
    :prog: gen_scmode_batches
+
+gmag_retrieve_alternate
+-----------------------
+.. argparse::
+   :module: thmsoc.cli.gmag_retrieve_alternate
+   :func: build_parser
+   :prog: gmag_retrieve_alternate
 
 gmag_retrieve_usgs_variometer
 -----------------------------

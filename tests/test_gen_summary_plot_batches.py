@@ -27,7 +27,8 @@ def test_make_plot_batches_adds_direct_to_dbase_when_installing(tmp_path):
     )
 
     batch_contents = (tmp_path / "batch_2024-05-25.bm").read_text()
-    assert "plot_dir='/mydisks/home/thmsoc/summary_reprocess/',/direct_to_dbase\n" in batch_contents
+    assert ",/direct_to_dbase\n" in batch_contents
+    assert "plot_dir=" not in batch_contents
 
 
 def test_make_plot_batches_omits_direct_to_dbase_by_default(tmp_path):
@@ -42,3 +43,4 @@ def test_make_plot_batches_omits_direct_to_dbase_by_default(tmp_path):
 
     batch_contents = (tmp_path / "batch_2024-05-25.bm").read_text()
     assert "/direct_to_dbase" not in batch_contents
+    assert "plot_dir='/mydisks/home/thmsoc/summary_reprocess/'" in batch_contents

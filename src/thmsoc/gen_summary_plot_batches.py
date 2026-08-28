@@ -21,8 +21,12 @@ def make_plot_batches(
             basename = f"batch_{batch_strings[0]}.bm"
             batch_filename_path = output_path/basename
             with open(batch_filename_path,'w') as f:
-                install_keyword = ",/direct_to_dbase" if install else ""
-                f.write(f"thm_over_shell,start_date='{batch_strings[0]}', end_date='{batch_strings[-1]}',inst={summary_plot_types},plot_dir='/mydisks/home/thmsoc/summary_reprocess/'{install_keyword}\n")
+                output_keyword = (
+                    ",/direct_to_dbase"
+                    if install
+                    else ",plot_dir='/mydisks/home/thmsoc/summary_reprocess/'"
+                )
+                f.write(f"thm_over_shell,start_date='{batch_strings[0]}', end_date='{batch_strings[-1]}',inst={summary_plot_types}{output_keyword}\n")
                 f.write(f"exit\n",)
             m.write(f"{basename}\n")
 

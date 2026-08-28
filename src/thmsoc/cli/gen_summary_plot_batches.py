@@ -27,6 +27,14 @@ def build_parser() -> argparse.ArgumentParser:
     # Specify output directory
     p.add_argument("-o", "--output_directory", help="Directory where master list and batch files will be written", required=True)
 
+    # Install plots directly in the database
+    p.add_argument(
+        "-i",
+        "--install",
+        help="Add /direct_to_dbase to thm_over_shell calls",
+        action="store_true",
+    )
+
     return p
 
 
@@ -47,7 +55,8 @@ def main() -> int:
         days=args.days,
         days_per_batch=args.batch_days,
         summary_plot_types=summary_plot_types,
-        output_directory=args.output_directory
+        output_directory=args.output_directory,
+        install=args.install,
     )
 
     return 0

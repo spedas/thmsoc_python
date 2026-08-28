@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from concurrent import futures
 from thmsoc import args_to_startend, batch_daterange
+from typing import TextIO
 
 def str_list_max(in_list:list[str]) -> str: 
     if len(in_list) == 0:
@@ -59,7 +60,7 @@ def construct_usgs_query(
         data_format = 'json'
         ):
     '''
-    construct URLs which query USGS server
+    construct URLs to query USGS server
     '''
     usgs_netloc='geomag.usgs.gov'
     usgs_path=usgs_remote_source_path
@@ -114,7 +115,9 @@ def get_source_alias(station_code:str) -> str:
         station_name_sourcealias = station_code
     return station_name_sourcealias
 
-def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime):
+def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime) -> bool:
+    # TODO: remove return True and update once new service is online
+    return True
     print("Checking "+ station_code.upper() +" availability for date: " + data_date.strftime('%Y-%m-%d') + "...") 
     avail_netloc='service.earthscope.org' 
     avail_path='/fdsnws/availability/1/extent'
@@ -159,24 +162,27 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
             ]) # omitting ('channel','BF?'), for now, until earthscope fixes indexing issue
     # Attempt to make url request: 
     try:
-        url_response_bytes = urllib3.request(
-            "GET", 
-            url, 
-            retries=0,
-            decode_content=False,
-            preload_content=False,
-            redirect=False,
-            timeout=20)
-        url_resp_str = decode2string(url_response_bytes)
-    except urllib3.exceptions.TimeoutError:
-        print("ERROR: Connection timed out! Calibration date could not be determined.")
+        try:
+            url_response_bytes = urllib3.request(
+                "GET", 
+                url, 
+                retries=0, # change to 2
+                decode_content=False,
+                preload_content=False,
+                redirect=False,
+                timeout=20)
+            url_resp_str = decode2string(url_response_bytes)
+            # If we get a bad response, exit with an error status
+            if url_response_bytes.status != 200:
+                raise Exception("Invalid status returned: " + str(url_response_bytes.status) + ".")
+        except urllib3.exceptions.TimeoutError:
+            raise Exception("Connection timed out!")
+        except urllib3.exceptions.MaxRetryError:
+            raise Exception("Max retries reached!")
+    except Exception as error:
+        print(F"ERROR! {error.args[0]} Calibration date could not be determined. Returning blank entry.")
         return ""
-    else:
-        # If we get a bad response, exit with an error status
-        if url_response_bytes.status != 200:
-            print("ERROR: Invalid status returned: " + str(url_response_bytes.status) + ". Calibration date could not be determined.")
-            return ""
-    
+
     root=ET.fromstring(url_resp_str)
     
     change_datetimes = []
@@ -384,16 +390,9 @@ def retrieve_file_bytes(
         start_datetime:dt.datetime,
         end_datetime:dt.datetime,
         sampling_period:str,
-        max_num_retries:int,
-        correct_time=True) -> urllib3.response.BaseHTTPResponse:
+        max_num_retries:int) -> urllib3.response.BaseHTTPResponse:
     try:
         # use parameters to construct query, make request:
-        #if sampling_period == "0.1" and correct_time:
-        #    corrected_time_start = dt.datetime.now()
-        #    start_datetime = correct_start_time(
-        #        station_code=station_code,
-        #        start_datetime=start_datetime,
-        #        sampling_period=sampling_period)
         url=construct_usgs_query(
             station_code=station_code,
             start_datetime=start_datetime,
@@ -423,8 +422,7 @@ def retrieve_file_bytes(
                             start_datetime=start_datetime,
                             end_datetime=end_datetime,
                             sampling_period=sampling_period,
-                            max_num_retries=max_num_retries-1,
-                            correct_time=False)
+                            max_num_retries=max_num_retries-1)
                         return url_response_bytes_retry
                     else:
                         raise ValueError(
@@ -438,8 +436,7 @@ def retrieve_file_bytes(
                             start_datetime=start_datetime,
                             end_datetime=end_datetime,
                             sampling_period=sampling_period,
-                            max_num_retries=max_num_retries-1,
-                            correct_time=False)
+                            max_num_retries=max_num_retries-1)
                         return url_response_bytes_retry
                     else:
                         raise ValueError(
@@ -567,7 +564,11 @@ def run_gmag_retrieve_usgs_variometer(
     
     import sys
     # Set line buffering to avoid long pauses when viewing output with 'tail'
-    sys.stdout.reconfigure(line_buffering=True)
+    #if hasattr(sys.stdout, 'reconfigure'):
+    if not isinstance(sys.stdout,TextIO):
+        sys.stdout.reconfigure(line_buffering=True)
+    else:
+        raise TypeError("stdout must not be TextIO (needs reconfigure attribute)")
     
     main_start_time = dt.datetime.now()
     str_datetime_run = main_start_time.strftime('%Y%m%d_%H%M%S')  
@@ -669,4 +670,4 @@ def run_gmag_retrieve_usgs_variometer(
         return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_usgs_variometer(start_date="2025-11-17",end_date="2025-11-17", station_list=['s61a'],sampling_rate='10')
+    run_gmag_retrieve_usgs_variometer(start_date="2026-07-18",end_date="2026-07-18", station_list=['anmo'],sampling_rate='10')

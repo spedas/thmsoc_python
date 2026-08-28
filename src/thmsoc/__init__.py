@@ -7,4 +7,5 @@ from .product_volume import run_product_volume
 from .gen_l2_batches import make_l2_batches
 from .gen_scmode_batches import make_scmode_batches
 from .gen_summary_plot_batches import make_plot_batches
+from .remote_retrieval import url_retrieve_file
 from .idl import IdlConfig, IdlJob, load_idl_config, run_idl

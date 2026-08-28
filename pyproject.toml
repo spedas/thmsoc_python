@@ -13,14 +13,17 @@ dependencies = [
     "scipy",
     "pyspedas",
     "tomli",
+    "obspy",
     "uv",
 ]
 
 [project.scripts]
+cdf_updater = "thmsoc.cli.cdf_updater:main"
 product_volume = "thmsoc.cli.product_volume:main"
 gen_l2_batches = "thmsoc.cli.gen_l2_batches:main"
 gen_summary_plot_batches = "thmsoc.cli.gen_summary_plot_batches:main"
 gmag_retrieve_usgs_variometer = "thmsoc.cli.gmag_retrieve_usgs_variometer:main"
+gmag_retrieve_alternate = "thmsoc.cli.gmag_retrieve_alternate:main"
 ip_owner_report = "thmsoc.cli.ip_owner_report:main"
 ip_rdns_report = "thmsoc.cli.ip_rdns_report:main"
 download_bz_recovery_data = "thmsoc.cli.download_bz_recovery_data:main"

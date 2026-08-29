@@ -38,7 +38,7 @@ gen_summary_plot_batches
    :prog: gen_summary_plot_batches
 
 gen_scmode_batches
---------------
+-------------------
 
 .. argparse::
    :module: thmsoc.cli.gen_scmode_batches

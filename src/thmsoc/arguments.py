@@ -30,7 +30,7 @@ valid_summary_plot_vals = ['over', 'esa', 'fgm', 'sst', 'memory', 'fitmom', 'fit
 valid_summary_plot_args = valid_summary_plot_vals.copy()
 valid_summary_plot_args.append('all')
 
-valid_l2_vals = ['fgm','fbk','fit','esa', 'mom','gmom','sst', 'fft', 'scm', 'efi','efp', 'efw', 'scmode']
+valid_l2_vals = ['fgm','fbk','fit','esa', 'mom','gmom','sst', 'fft', 'scm', 'efi','efp', 'efw']
 valid_l2_args = valid_l2_vals.copy()
 valid_l2_args.append('all')
 

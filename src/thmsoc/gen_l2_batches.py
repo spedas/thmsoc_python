@@ -1,4 +1,3 @@
-from pyspedas import time_string, time_double
 from thmsoc import args_to_startend
 from thmsoc import batch_daterange
 from thmsoc import datelist_to_string
@@ -16,7 +15,13 @@ def make_l2_batches(start_date, end_date, days, days_per_batch, l2_types, probes
                 basename = f"batch_{batch_dates[0]}_probe_{probe}.bm"
                 batchfile_path = output_path / basename
                 with open(batchfile_path,'w') as f:
-                    f.write(f"thm_reprocess_l2gen_days,{batch_dates},{l2_types},'{probe}'\n")
+                    f.write(
+                        "thm_reprocess_l2gen_days,"
+                        f"start_date='{batch_dates[0]}',"
+                        f"end_date='{batch_dates[-1]}',"
+                        f"instrument={l2_types},"
+                        f"probes='{probe}'\n"
+                    )
                     f.write(f"exit\n",)
                 m.write(f"{basename}\n")
 

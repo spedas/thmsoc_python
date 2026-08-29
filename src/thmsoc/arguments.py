@@ -23,15 +23,15 @@ def check_trange_arguments(args:argparse.Namespace) -> bool:
     return True
 
 valid_probe_vals = ['a', 'b', 'c', 'd', 'e']
-valid_probe_args = valid_probe_vals
+valid_probe_args = valid_probe_vals.copy()
 valid_probe_args.append('all')
 
 valid_summary_plot_vals = ['over', 'esa', 'fgm', 'sst', 'memory', 'fitmom', 'fitgmom', 'fftfbk', 'fgmdyn']
-valid_summary_plot_args = valid_summary_plot_vals
+valid_summary_plot_args = valid_summary_plot_vals.copy()
 valid_summary_plot_args.append('all')
 
 valid_l2_vals = ['fgm','fbk','fit','esa', 'mom','gmom','sst', 'fft', 'scm', 'efi','efp', 'efw', 'scmode']
-valid_l2_args = valid_l2_vals
+valid_l2_args = valid_l2_vals.copy()
 valid_l2_args.append('all')
 
 # THEMIS alias for USGS Variometer station codes

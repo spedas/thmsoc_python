@@ -13,6 +13,7 @@ def make_plot_batches(
     output_directory,
     install=False,
     plot_dir=DEFAULT_PLOT_DIR,
+    probes="all",
 ):
     start, end = args_to_startend(start_date, end_date, days)
     output_path = Path(output_directory)
@@ -24,7 +25,8 @@ def make_plot_batches(
             basename = f"batch_{batch_strings[0]}.bm"
             batch_filename_path = output_path/basename
             with open(batch_filename_path,'w') as f:
-                output_keywords = f",plot_dir='{plot_dir}'"
+                probes_argument = f"'{probes}'" if isinstance(probes, str) else str(probes)
+                output_keywords = f",probes={probes_argument},plot_dir='{plot_dir}'"
                 if install:
                     output_keywords += ",/direct_to_dbase"
                 f.write(f"thm_over_shell,start_date='{batch_strings[0]}', end_date='{batch_strings[-1]}',inst={summary_plot_types}{output_keywords}\n")

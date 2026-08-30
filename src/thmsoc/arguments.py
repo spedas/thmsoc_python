@@ -45,8 +45,20 @@ valid_gmag_usgs_variometer_station_vals = [
 valid_gmag_usgs_variometer_station_args = valid_gmag_usgs_variometer_station_vals.copy()
 valid_gmag_usgs_variometer_station_args.append('all')
 
-def add_probe_arguments(p:argparse.ArgumentParser) -> None:
-    p.add_argument("-p", "--probes", help="Probes to process", required=True, nargs='*', choices=valid_probe_args)
+def add_probe_arguments(
+    p: argparse.ArgumentParser,
+    required: bool = True,
+    default: list[str] | None = None,
+) -> None:
+    p.add_argument(
+        "-p",
+        "--probes",
+        help="Probes to process",
+        required=required,
+        default=default,
+        nargs='*',
+        choices=valid_probe_args,
+    )
 
 def expand_probe_arguments(args:argparse.Namespace) -> list[str]:
     if 'all' in args.probes:

@@ -21,6 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     # Specify L2 data type arguments
     add_summary_plot_arguments(p)
 
+    # Specify probe arguments
+    add_probe_arguments(p, required=False, default=["all"])
+
     # Specify days per batch argument
     p.add_argument("-b", "--batch_days", help="Days per batch to process", type=int, default=1)
 
@@ -55,6 +58,9 @@ def main() -> int:
     # Expand L2 types in case 'all' was specified
     summary_plot_types = expand_summary_plot_arguments(args)
 
+    # Expand probes in case 'all' was specified
+    probes = expand_probe_arguments(args)
+
     # Run the report
     make_plot_batches(
         start_date=args.start_date,
@@ -62,6 +68,7 @@ def main() -> int:
         days=args.days,
         days_per_batch=args.batch_days,
         summary_plot_types=summary_plot_types,
+        probes=probes,
         output_directory=args.output_directory,
         plot_dir=args.plot_dir,
         install=args.install,

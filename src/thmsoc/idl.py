@@ -143,6 +143,7 @@ def run_idl(
     timeout: float | None = None,
     check: bool = False,
     keep_batch: bool = False,
+    start_new_session: bool = False,
 ) -> subprocess.CompletedProcess[Any] | IdlJob:
     """Run an IDL batch file synchronously or asynchronously.
 
@@ -203,6 +204,7 @@ def run_idl(
         process = subprocess.Popen(
             command, cwd=working_dir, env=child_env, stdin=stdin_value,
             stdout=stdout_value, stderr=stderr_value,
+            start_new_session=start_new_session,
         )
     except Exception:
         if generated and not keep_batch:

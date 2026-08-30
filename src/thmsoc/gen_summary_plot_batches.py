@@ -2,6 +2,8 @@ from pyspedas import time_string, time_double
 from thmsoc import args_to_startend, batch_daterange, datelist_to_string
 from pathlib import Path
 
+DEFAULT_PLOT_DIR = "/mydisks/home/thmsoc/summary_reprocess/"
+
 def make_plot_batches(
     start_date,
     end_date,
@@ -10,6 +12,7 @@ def make_plot_batches(
     summary_plot_types,
     output_directory,
     install=False,
+    plot_dir=DEFAULT_PLOT_DIR,
 ):
     start, end = args_to_startend(start_date, end_date, days)
     output_path = Path(output_directory)
@@ -21,12 +24,10 @@ def make_plot_batches(
             basename = f"batch_{batch_strings[0]}.bm"
             batch_filename_path = output_path/basename
             with open(batch_filename_path,'w') as f:
-                output_keyword = (
-                    ",/direct_to_dbase"
-                    if install
-                    else ",plot_dir='/mydisks/home/thmsoc/summary_reprocess/'"
-                )
-                f.write(f"thm_over_shell,start_date='{batch_strings[0]}', end_date='{batch_strings[-1]}',inst={summary_plot_types}{output_keyword}\n")
+                output_keywords = f",plot_dir='{plot_dir}'"
+                if install:
+                    output_keywords += ",/direct_to_dbase"
+                f.write(f"thm_over_shell,start_date='{batch_strings[0]}', end_date='{batch_strings[-1]}',inst={summary_plot_types}{output_keywords}\n")
                 f.write(f"exit\n",)
             m.write(f"{basename}\n")
 

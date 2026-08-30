@@ -4,7 +4,7 @@ import argparse
 import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
-from thmsoc.gen_summary_plot_batches import make_plot_batches
+from thmsoc.gen_summary_plot_batches import DEFAULT_PLOT_DIR, make_plot_batches
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_summary_plot_arguments, expand_summary_plot_arguments
 from thmsoc.arguments import add_probe_arguments, expand_probe_arguments
@@ -26,6 +26,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Specify output directory
     p.add_argument("-o", "--output_directory", help="Directory where master list and batch files will be written", required=True)
+
+    # Specify plot output directory
+    p.add_argument(
+        "--plot_dir",
+        help="Parent directory where summary plots will be written",
+        default=DEFAULT_PLOT_DIR,
+    )
 
     # Install plots directly in the database
     p.add_argument(
@@ -56,6 +63,7 @@ def main() -> int:
         days_per_batch=args.batch_days,
         summary_plot_types=summary_plot_types,
         output_directory=args.output_directory,
+        plot_dir=args.plot_dir,
         install=args.install,
     )
 

@@ -149,17 +149,19 @@ def get_usgs_variometer_avail(station_code:str,data_date:dt.datetime) -> bool:
         print("-> " + station_code.upper() + " data is available for date: " + data_date.strftime('%Y-%m-%d'))
         return True
 
-def get_usgs_variometer_cal_history(station_code:str) -> str:
-    print("Checking " + station_code.upper() + " latest calibration date...")
-    cal_date_latest_str = ""
+def get_usgs_variometer_cal_history() -> str:
+    # initialize metadatachange xml string response:
+    metadatachange_str = ""
+    # construct web query:
     url = construct_web_query(
-        web_netloc='service.earthscope.org', # renamed from 'service.iris.edu'
+        web_netloc='service.earthscope.org',
         web_path='/irisws/metadatachange/1/query',
         query_list=[
-            ('station',[get_source_alias(station_code).upper()]),
+            ('channel',['BF*']),
+            ('net',['GS,IU,N4,US']),
             ('format',['xml']),
             ('nodata',['404'])
-            ]) # omitting ('channel','BF?'), for now, until earthscope fixes indexing issue
+            ]) 
     # Attempt to make url request: 
     try:
         try:
@@ -171,7 +173,7 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
                 preload_content=False,
                 redirect=False,
                 timeout=20)
-            url_resp_str = decode2string(url_response_bytes)
+            metadatachange_str = decode2string(url_response_bytes)
             # If we get a bad response, exit with an error status
             if url_response_bytes.status != 200:
                 raise Exception("Invalid status returned: " + str(url_response_bytes.status) + ".")
@@ -180,20 +182,9 @@ def get_usgs_variometer_cal_history(station_code:str) -> str:
         except urllib3.exceptions.MaxRetryError:
             raise Exception("Max retries reached!")
     except Exception as error:
-        print(F"ERROR! {error.args[0]} Calibration date could not be determined. Returning blank entry.")
-        return ""
-
-    root=ET.fromstring(url_resp_str)
-    
-    change_datetimes = []
-    change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BF1']..")]))
-    change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BF2']..")]))
-    change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BFZ']..")]))
-    change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall("./*[@class='StationLocation']")]))
-    
-    cal_date_latest_str = str_list_max(change_datetimes)
-    print("-> " + station_code.upper() + " data last calibrated on " + cal_date_latest_str)
-    return cal_date_latest_str
+        print(F"ERROR! {error.args[0]} Calibration history could not be determined. Returning blank response.")
+        return metadatachange_str
+    return metadatachange_str
 
 def json2iaga2002(str_json_segment:str) -> str:
     '''
@@ -615,8 +606,25 @@ def run_gmag_retrieve_usgs_variometer(
     cal_check_start_time = dt.datetime.now()
     print("------ Checking latest calibration dates... ------")
     cal_date_dict = dict()
+    print("Retrieving calibration history for all stations...")
+    metadatachange_str = get_usgs_variometer_cal_history()
+    print("Attempting to read calibration history...")
     for station_code in station_list:
-        cal_date_dict[station_code] = get_usgs_variometer_cal_history(station_code)
+        if metadatachange_str != "":
+            print("Checking " + station_code.upper() + " latest calibration date...")
+            
+            root=ET.fromstring(metadatachange_str)
+            station_root = root.findall(f".//*[@station='{get_source_alias(station_code).upper()}']..")
+            change_datetimes = [change.attrib['changetime'] for change in station_root]
+            #change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BF1']..")]))
+            #change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BF2']..")]))
+            #change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall(".//*[@code='BFZ']..")]))
+            #change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall("./*[@class='StationLocation']")]))
+            
+            cal_date_latest_str = str_list_max(change_datetimes)
+            print("-> " + station_code.upper() + " data last calibrated on " + cal_date_latest_str)
+        else:
+            cal_date_dict[station_code] = ""
     print("Calibration date checking complete. Elapsed a total of %.0f seconds." % (dt.datetime.now() - cal_check_start_time).seconds )
     
     print("------ Beginning File Retrieval... ------")

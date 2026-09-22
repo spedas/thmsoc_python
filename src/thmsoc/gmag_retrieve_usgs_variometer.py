@@ -622,7 +622,8 @@ def run_gmag_retrieve_usgs_variometer(
             #change_datetimes.append(str_list_max([change.attrib['changetime'] for change in root.findall("./*[@class='StationLocation']")]))
             
             cal_date_latest_str = str_list_max(change_datetimes)
-            print("-> " + station_code.upper() + " data last calibrated on " + cal_date_latest_str)
+            cal_date_dict[station_code] = cal_date_latest_str
+            print("-> " + station_code.upper() + " data last calibrated on " + cal_date_dict[station_code])
         else:
             cal_date_dict[station_code] = ""
     print("Calibration date checking complete. Elapsed a total of %.0f seconds." % (dt.datetime.now() - cal_check_start_time).seconds )
@@ -678,4 +679,4 @@ def run_gmag_retrieve_usgs_variometer(
         return 0
 
 if __name__ == "__main__":
-    run_gmag_retrieve_usgs_variometer(start_date="2026-07-18",end_date="2026-07-18", station_list=['anmo'],sampling_rate='10')
+    run_gmag_retrieve_usgs_variometer(start_date="2026-07-18",end_date="2026-07-18", station_list=['anmo','bouv','s61a'],sampling_rate='1')

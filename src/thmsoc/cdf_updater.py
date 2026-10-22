@@ -11,6 +11,18 @@ This script contains functions to:
 * Update CDF metadata using an input argument
 """
 
+def specify_varattr_cdfdtype(vattr:dict,varinfo_data_type_desc:str) -> dict:
+    """
+    Enforces datatype specification for FILLVAL, VALIDMIN, VALIDMAX
+
+    Needed for writing CDF to file 
+    """
+    for attrname in ["FILLVAL","VALIDMIN","VALIDMAX"]:
+        if attrname in vattr.keys():
+            # check if variable attribute already has 
+            vattr[attrname] = [vattr[attrname],varinfo_data_type_desc]
+    return vattr
+
 def set_cdf_variable(cdf_variable:dict) -> dict:
     """
     Converts data_val data type/dtype based on cdf_datatype. If data_val is None, applies a default null value to the variable data.
@@ -32,41 +44,6 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
     cdf_default_pad_values.update(dict.fromkeys(["CDF_INT8", "CDF_TIME_TT2000"], -9223372036854775807)) # 8, 33
     cdf_default_pad_values.update(dict.fromkeys(["CDF_REAL4","CDF_FLOAT","CDF_REAL8","CDF_DOUBLE"], -1.0e30)) # 21, 44, 22, 45
     cdf_default_pad_values.update(dict.fromkeys(["CDF_CHAR", "CDF_UCHAR"]," ")) # 51, 52
-    
-    # after matching the variable datatype, set appropriate variable datatype, pad value, and fillval
-    if cdf_variable["VarInfo"]["Data_Type"] in [51,52]:
-        cdf_variable["VarInfo"]["Pad"]=str(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
-    elif cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
-        cdf_variable["VarInfo"]["Pad"]=float(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
-    else: 
-        cdf_variable["VarInfo"]["Pad"]=int(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
-
-    if "FILLVAL" in cdf_variable["VarAttrs"].keys():
-        if cdf_variable["VarAttrs"]["FILLVAL"] is None:
-            if cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
-                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([np.nan])
-            else:
-                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([cdf_variable["VarInfo"]["Pad"]])
-        else:
-            if isinstance(cdf_variable["VarAttrs"]["FILLVAL"],list):
-                cdf_variable["VarAttrs"]["FILLVAL"] = np.array(cdf_variable["VarAttrs"]["FILLVAL"])
-            elif not isinstance(cdf_variable["VarAttrs"]["FILLVAL"],np.ndarray):
-                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([cdf_variable["VarAttrs"]["FILLVAL"]])
-
-    if cdf_variable["VarInfo"]["Last_Rec"] >= 0:
-        if cdf_variable["VarData"] is None:
-            if "FILLVAL" in cdf_variable["VarAttrs"].keys():
-                cdf_variable["VarData"] = cdf_variable["VarAttrs"]["FILLVAL"]
-            else:
-                if cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
-                    cdf_variable["VarData"] = np.array([np.nan])
-                else:
-                    cdf_variable["VarData"] = np.array([cdf_variable["VarInfo"]["Pad"]])
-        else:
-            if isinstance(cdf_variable["VarData"],list):
-                cdf_variable["VarData"] = np.array(cdf_variable["VarData"])
-            elif not isinstance(cdf_variable["VarData"],np.ndarray):
-                cdf_variable["VarData"] = np.array([cdf_variable["VarData"]])
 
     match cdf_variable["VarInfo"]["Data_Type"]:
         case 1 | 41:
@@ -74,8 +51,8 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
         case 2:
             dtype_toset = np.int16 
         case 4: 
-            #dtype_toset = np.int32 
-            dtype_toset = np.int64 
+            dtype_toset = np.int32 
+            #dtype_toset = np.int64 
         case 8 | 33:
             dtype_toset = np.int64 
         case 11:
@@ -84,8 +61,9 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
             dtype_toset = np.uint16
         case 14:
             dtype_toset = np.uint32
-        case 21 | 44:
-            #dtype_toset = np.float32
+        case 21:
+            dtype_toset = np.float32
+        case 44: # 21 | 
             dtype_toset = np.float64
         case 22 | 45 | 31:
             dtype_toset = np.float64
@@ -95,6 +73,66 @@ def set_cdf_variable(cdf_variable:dict) -> dict:
             dtype_toset = np.str_
         case _:
             raise ValueError(f"ERROR! Variable Datatype not recognized. Please check variable: {cdf_variable["VarInfo"]["Variable"]}")
+
+    # after matching the variable datatype, set appropriate variable datatype, pad value, and fillval
+    if cdf_variable["VarInfo"]["Pad"] is None:
+        # PAD values are required for ISTP compliance--if a PAD value does not exist for the variable, use default PAD:    
+        #match cdf_variable["VarInfo"]["Data_Type"]:
+        #    case 51 | 52:
+        #        dtype_pad=str
+        #    case 21 | 44 | 22 | 45 | 31 | 32:
+        #        dtype_pad=float
+        #    case _:
+        #        dtype_pad=int
+        dtype_pad = dtype_toset
+        if cdf_variable["VarInfo"]["Data_Type"] in [51,52]: dtype_pad = str
+        cdf_variable["VarInfo"]["Pad"] = dtype_pad(cdf_default_pad_values[cdf_variable["VarInfo"]["Data_Type_Description"]])
+    
+    # if PAD, FILLVAL, VALIDMIN, VALIDMAX are arrays, convert to single values
+    if isinstance(cdf_variable["VarInfo"]["Pad"],np.ndarray):
+        if len(cdf_variable["VarInfo"]["Pad"]) == 1:
+            cdf_variable["VarInfo"]["Pad"] = cdf_variable["VarInfo"]["Pad"][0]
+        else:
+            raise ValueError(f"ERROR! Variable Info Pad value is ambiguous array. Please check variable: {cdf_variable["VarInfo"]["Variable"]}")
+
+    for attrname in ["FILLVAL","VALIDMIN","VALIDMAX"]:
+        if attrname in cdf_variable["VarAttrs"].keys():
+            if isinstance(cdf_variable["VarInfo"]["Pad"],np.ndarray):
+                if len(cdf_variable["VarAttrs"][attrname]) == 1:
+                    cdf_variable["VarAttrs"][attrname] = cdf_variable["VarAttrs"][attrname][0]
+                else:
+                    raise ValueError(f"ERROR! Variable Info {attrname} value is ambiguous array. Please check variable: {cdf_variable["VarInfo"]["Variable"]}")
+
+    # Initialize default fillval:
+    if cdf_variable["VarInfo"]["Data_Type"] in [21,44,22,45,31,32]:
+        default_fillval = np.array([np.nan])
+    else:
+        default_fillval = np.array([cdf_variable["VarInfo"]["Pad"]])
+    
+    if "FILLVAL" in cdf_variable["VarAttrs"].keys():
+        if cdf_variable["VarAttrs"]["FILLVAL"] is None:
+            # FILLVAL is required for record varying variables for ISTP compliance. Must match variable type
+            cdf_variable["VarAttrs"]["FILLVAL"] = default_fillval
+        # FILLVAL must be ndarray:
+        if not isinstance(cdf_variable["VarAttrs"]["FILLVAL"],np.ndarray):
+            if isinstance(cdf_variable["VarAttrs"]["FILLVAL"],list):
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array(cdf_variable["VarAttrs"]["FILLVAL"])
+            else:
+                cdf_variable["VarAttrs"]["FILLVAL"] = np.array([cdf_variable["VarAttrs"]["FILLVAL"]])
+
+    # Need to define VarInfo, if record varying:        
+    if cdf_variable["VarInfo"]["Last_Rec"] >= 0:
+        if cdf_variable["VarData"] is None:
+            if "FILLVAL" in cdf_variable["VarAttrs"].keys():
+                cdf_variable["VarData"] = cdf_variable["VarAttrs"]["FILLVAL"]
+            else:
+                cdf_variable["VarData"] = default_fillval
+        if not isinstance(cdf_variable["VarData"],np.ndarray):
+            if isinstance(cdf_variable["VarData"],list):
+                cdf_variable["VarData"] = np.array(cdf_variable["VarData"])
+            else:
+                cdf_variable["VarData"] = np.array([cdf_variable["VarData"]])
+    
     for attrname in ["FILLVAL","VALIDMIN","VALIDMAX"]:
         if attrname in cdf_variable["VarAttrs"].keys():
             cdf_variable["VarAttrs"][attrname] = dtype_toset(cdf_variable["VarAttrs"][attrname])        
@@ -184,8 +222,10 @@ def dict_equals(
                                         abort_comp = True
                                 else:
                                     # lengths should be the same; check for set equivalency:
-                                    val_set_1 = val_1.sort()
-                                    val_set_2 = val_2.sort()
+                                    #val_set_1 = val_1.sort()
+                                    #val_set_2 = val_2.sort()
+                                    val_set_1 = set(val_1)
+                                    val_set_2 = set(val_2)                      
                                     if val_set_1 != val_set_2:
                                         # the sets are not just reordered; they have different elements
                                         print(f"List mismatch between {name1}[\"{dict_key}\"] and {name2}[\"{dict_key}\"]")
@@ -600,9 +640,10 @@ def cdf_generate(
             cdf_output.write_globalattrs(globalAttrs=output_cdf_struct.get("GlobalAttrs"))
             # Write Variable attributes:
             for var in output_cdf_struct["Variables"].keys():
+                var_attrs_dict = output_cdf_struct["Variables"][var]["VarAttrs"].copy()
                 cdf_output.write_var(
                     var_spec=output_cdf_struct["Variables"][var]["VarInfo"],
-                    var_attrs=output_cdf_struct["Variables"][var]["VarAttrs"],
+                    var_attrs=specify_varattr_cdfdtype(var_attrs_dict,output_cdf_struct["Variables"][var]["VarInfo"]["Data_Type_Description"]),
                     var_data=output_cdf_struct["Variables"][var]["VarData"])
             # Finally, close the newly written CDF: 
             cdf_output.close()
@@ -615,13 +656,13 @@ def cdf_generate(
             # If original CDF was saved to the processing directory, it can now be removed
             if overwrite_CDF:
                 print(f"Removing original copy of {output_cdf_fp.name} from temporary processing directory...")
-                output_cdf_tmp_fp.unlink()
+                output_cdf_tmp_fp.unlink(missing_ok=True)
         else:
-            raise ValueError(f"Generated {output_cdf_fp.name} failed verification check")    
+            raise ValueError(f"Generated {output_cdf_fp.name} failed verification check")
         return
     except Exception as error:
         # Remove new file in target directory:
-        output_cdf_fp.unlink()
+        output_cdf_fp.unlink(missing_ok=True)
         # If original CDF was saved to the processing directory, move it back to the target directory:
         if overwrite_CDF:
             shutil.move(
@@ -629,7 +670,10 @@ def cdf_generate(
                 dst=output_cdf_fp)
         raise Exception(f"CDF Update Failed! Reason: {error.args[0]}. Removing temporary CDF file...")
 
-def cdf_load_and_generate(outputcdf_fp:str | Path, mastercdf_fp:str | Path | None = None, updates:dict = {}):
+def cdf_load_and_generate(
+        outputcdf_fp:str | Path, 
+        mastercdf_fp:str | Path | None = None, 
+        updates:dict = {}):
     if isinstance(outputcdf_fp,str):
         outputcdf_fp=Path(outputcdf_fp)
     if outputcdf_fp.exists():
@@ -729,13 +773,13 @@ def cdf_updater(
     return
 
 if __name__ == "__main__":
-    # Remove old mastercdf if it exists:
     mastercdf_dir = "C:/Users/DC/Documents/Projects/thmsoc_svn/src/mastercdfs/thg"
     path_lrv_old = f"{mastercdf_dir}/thg_l2_mag_lrv_00000000_v01.cdf"
     path_lrv_new = f"{mastercdf_dir}/thg_l2_mag_lrv_1min_00000000_v01.cdf"
     path_snkq_old = f"{mastercdf_dir}/thg_l2_mag_snkq_00000000_v01.cdf"
     path_snkq_new = f"{mastercdf_dir}/thg_l2_mag_snkq_1min_00000000_v01.cdf"
-
+    
+    # Remove previously created new LRV mastercdf if it exists:
     Path(path_lrv_new).unlink(missing_ok=True)
     # Re-create it using cdf_updater:
     cdf_updater(
@@ -762,7 +806,7 @@ if __name__ == "__main__":
                 }
             }
         })
-    # Do the same for SNKQ
+    # Do the same for SNKQ:
     Path(path_snkq_new).unlink(missing_ok=True)
     cdf_updater(
         mastercdf_fp=path_snkq_old, 
@@ -782,10 +826,10 @@ if __name__ == "__main__":
                     'DISPLAY_TYPE':'time_series>y=thg_magh_snkq_1min(0)',
                 },
                 'thg_magd_snkq_1min':{
-                    'DISPLAY_TYPE':'time_series>y=thg_magd_snkq_1min(0)',
+                    'DISPLAY_TYPE':'time_series>y=thg_magd_snkq_1min(1)',
                 },
                 'thg_magz_snkq_1min':{
-                    'DISPLAY_TYPE':'time_series>y=thg_magz_snkq_1min(0)',
+                    'DISPLAY_TYPE':'time_series>y=thg_magz_snkq_1min(2)',
                 }
             }
         })

@@ -71,20 +71,24 @@ class TrafficCounts:
     user_agents: Counter[str] = field(default_factory=Counter)
     urls: Counter[str] = field(default_factory=Counter)
     referers: Counter[str] = field(default_factory=Counter)
+    responses: Counter[str] = field(default_factory=Counter)
 
 
 def count_requests(
-    lines: Iterable[str], status: str, *,
+    lines: Iterable[str], *,
     time_range: tuple[float, float] | None = None,
     ip_filters: tuple[str, ...] = (),
     url_filters: RegexFilters = RegexFilters(),
     user_agent_filters: RegexFilters = RegexFilters(),
     referer_filters: RegexFilters = RegexFilters(),
+    response_patterns: tuple[str, ...] = (),
+    excluded_response_patterns: tuple[str, ...] = (),
     save_matches: TextIO | None = None,
     collect_ips: bool = False,
     collect_user_agents: bool = False,
     collect_referers: bool = False,
     collect_urls: bool = False,
+    collect_responses: bool = False,
 ) -> TrafficCounts:
     """Count all input lines; stream matches and aggregate requested fields."""
     counts = TrafficCounts()
@@ -93,17 +97,15 @@ def count_requests(
         fields = line.split(maxsplit=9)
         if len(fields) < 10 or not fields[3].startswith("["):
             continue
-        if not fields[8].isascii() or not fields[8].isdigit() or len(fields[8]) != 3:
+        code = fields[8]
+        if len(code) != 3 or not code.isascii() or not code.isdigit():
+            continue
+        if not all(fnmatchcase(code, pattern) for pattern in response_patterns):
+            continue
+        if any(fnmatchcase(code, pattern) for pattern in excluded_response_patterns):
             continue
         address = fields[0]
         if not all(matches_ip(address, pattern) for pattern in ip_filters):
-            continue
-        code = fields[8]
-        if status == "successful" and code != "200":
-            continue
-        if status == "unsuccessful" and not (
-            len(code) == 3 and code[0] in "45" and code[1:].isascii() and code[1:].isdigit()
-        ):
             continue
         if time_range is not None:
             try:
@@ -143,31 +145,38 @@ def count_requests(
             counts.user_agents[agent if agent is not None else "-"] += 1
         if collect_referers:
             counts.referers[referer if referer is not None else "-"] += 1
+        if collect_responses:
+            counts.responses[code] += 1
     return counts
 
 
 def write_report(
-    lines: Iterable[str], output: TextIO, status: str, *,
+    lines: Iterable[str], output: TextIO, *,
     time_range: tuple[float, float] | None = None,
     ip_filters: tuple[str, ...] = (),
     url_filters: RegexFilters = RegexFilters(),
     user_agent_filters: RegexFilters = RegexFilters(),
     referer_filters: RegexFilters = RegexFilters(),
+    response_patterns: tuple[str, ...] = (),
+    excluded_response_patterns: tuple[str, ...] = (),
     save_matches: TextIO | None = None,
     save_ips: TextIO | None = None,
     save_user_agents: TextIO | None = None,
     save_urls: TextIO | None = None,
     save_referer: TextIO | None = None,
+    save_responses: TextIO | None = None,
 ) -> None:
     """Print totals, save requested data, and preview each ranked output."""
     counts = count_requests(
-        lines, status, time_range=time_range, ip_filters=ip_filters,
+        lines, time_range=time_range, ip_filters=ip_filters,
         url_filters=url_filters, user_agent_filters=user_agent_filters,
-        referer_filters=referer_filters,
+        referer_filters=referer_filters, response_patterns=response_patterns,
+        excluded_response_patterns=excluded_response_patterns,
         save_matches=save_matches, collect_ips=save_ips is not None,
         collect_user_agents=save_user_agents is not None,
         collect_urls=save_urls is not None,
         collect_referers=save_referer is not None,
+        collect_responses=save_responses is not None,
     )
     print(f"Requests: {counts.requests}", file=output)
     print(f"Matches: {counts.matches}", file=output)
@@ -178,6 +187,7 @@ def write_report(
         ("USER AGENTS", counts.user_agents, save_user_agents),
         ("URLS", counts.urls, save_urls),
         ("REFERERS", counts.referers, save_referer),
+        ("RESPONSES", counts.responses, save_responses),
     ):
         if destination is None:
             continue

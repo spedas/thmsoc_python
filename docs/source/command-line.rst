@@ -94,8 +94,9 @@ contributes zero.
 
 Use ``--save_matches FILE`` to save original matching log lines in input order,
 without counts or headings. Use ``--save_ips FILE``, ``--save_user_agents FILE``,
-``--save_urls FILE``, and ``--save_referer FILE`` to save all distinct matching
-values with counts, sorted by descending count (ties by descending value).
+``--save_urls FILE``, ``--save_referer FILE``, and ``--save_responses FILE`` to
+save all distinct matching values with counts, sorted by descending count
+(ties by descending value).
 Each option also prints its top 25 values and total unique count to the
 console. Unrequested sections are omitted. Missing user agents and referers
 are counted as ``-``.
@@ -111,6 +112,12 @@ Use ``--ip`` to match a literal substring anywhere in the source IP address,
 or quote a shell glob to match the whole address. Repeat ``--ip`` to require
 every IP pattern.
 
+Use ``--response`` and ``--not_response`` to include or exclude whole
+three-digit HTTP status codes. Both accept shell globs: ``200`` matches
+exactly 200, ``4??`` matches any 4xx, and ``[45]??`` matches any 4xx or 5xx.
+Quote patterns containing wildcards. All inclusion patterns must match,
+and any matching exclusion rejects the request.
+
 Use ``--url`` to search the logged request target (including its query
 string). Use ``--user_agent`` and ``--referer`` to search the corresponding
 fields in the Apache combined log. Use ``--not_url``, ``--not_user_agent``,
@@ -123,7 +130,8 @@ inclusion filters and pass their exclusions.
 
 .. code-block:: bash
 
-   web_traffic_report --latest 10 -s unsuccessful --ip '128.32.*.*' --save_ips ips.txt
+   web_traffic_report --latest 10 --response '[45]??' --ip '128.32.*.*' --save_ips ips.txt
+   web_traffic_report --response '4??' --not_response 404 --save_responses responses.txt
    web_traffic_report --ip 128.32
    web_traffic_report --url 'api/v[0-9]+' --not_url 'health|metrics'
    web_traffic_report --user_agent 'Mozilla' --not_user_agent '(?i)bot' --save_matches requests.log

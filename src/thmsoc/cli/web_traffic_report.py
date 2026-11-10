@@ -11,7 +11,7 @@ import time
 from thmsoc.web_traffic_report import RegexFilters, write_report
 
 DEFAULT_LOG = Path("/var/log/httpd/ssl_access_log")
-SAVE_FIELDS = ("matches", "ips", "user_agents", "urls", "referer")
+SAVE_FIELDS = ("matches", "ips", "user_agents", "urls", "referer", "responses")
 
 
 def positive_minutes(value: str) -> int:
@@ -43,8 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Summarize Apache access log requests (default: entire file)."
     )
     parser.add_argument(
-        "-s", "--status", choices=("successful", "unsuccessful", "all"), default="all",
-        help="filter by HTTP status: successful = 200, unsuccessful = 4xx or 5xx (default: all)",
+        "--response", action="append", metavar="PATTERN",
+        help="require a whole HTTP status code to match a shell glob (e.g. '4??'); repeatable",
+    )
+    parser.add_argument(
+        "--not_response", action="append", metavar="PATTERN",
+        help="exclude requests whose HTTP status code matches a shell glob; repeatable",
     )
     parser.add_argument(
         "--log", type=Path, default=DEFAULT_LOG, metavar="FILE",
@@ -78,7 +82,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="exclusive ISO 8601 end time; local time if no offset is given",
     )
     for field in SAVE_FIELDS:
-        label = "referer strings" if field == "referer" else field.replace("_", " ")
+        label = {"referer": "referer strings", "responses": "HTTP status codes"}.get(
+            field, field.replace("_", " "),
+        )
         help_text = (
             "save original matching log lines"
             if field == "matches"
@@ -138,7 +144,9 @@ def main() -> int:
                 for name, path in paths.items()
             }
             write_report(
-                lines, sys.stdout, args.status, time_range=time_range,
+                lines, sys.stdout, time_range=time_range,
+                response_patterns=tuple(args.response or ()),
+                excluded_response_patterns=tuple(args.not_response or ()),
                 ip_filters=tuple(args.ip),
                 url_filters=RegexFilters(tuple(args.url or ()), tuple(args.not_url or ())),
                 user_agent_filters=RegexFilters(

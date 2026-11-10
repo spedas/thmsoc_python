@@ -82,6 +82,18 @@ be read from a file or standard input; output is tab-separated.
    :func: build_parser
    :prog: ip_rdns_report
 
+web_traffic_report
+------------------
+
+Summarize Apache access log requests from the previous local minute. The
+report lists the 30 most frequent source IPs and request URLs and counts
+all unique source IPs that match the selected status filter.
+
+.. argparse::
+   :module: thmsoc.cli.web_traffic_report
+   :func: build_parser
+   :prog: web_traffic_report
+
 download_bz_recovery_data
 -------------------------
 

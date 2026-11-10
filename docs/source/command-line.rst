@@ -85,9 +85,35 @@ be read from a file or standard input; output is tab-separated.
 web_traffic_report
 ------------------
 
-Summarize Apache access log requests from the previous local minute. The
-report lists the 30 most frequent source IPs and request URLs and counts
-all unique source IPs that match the selected status filter.
+Summarize an entire Apache access log by default. The report lists the 30 most
+frequent source IPs and request URLs and counts all unique source IPs that
+match the selected filters.
+
+Use ``--latest N`` for the last N complete minutes, excluding the current
+minute. For a fixed window, supply both ``--start_time`` and ``--end_time``.
+The start is inclusive and the end is exclusive. Use ISO 8601 timestamps
+with a UTC offset or ``Z`` for UTC; times without offsets use the machine's
+local time. The log's own offsets are used when comparing timestamps.
+Use ``--ip`` to match a literal substring anywhere in the source IP address,
+or quote a shell glob to match the whole address. Repeat ``--ip`` to require
+every IP pattern.
+
+Use ``--url`` and ``--user_agent`` to search anywhere in the logged request
+target (including its query string) or the Apache combined log's user agent
+field. Use ``--not_url`` and ``--not_user_agent`` to exclude matches. These
+options accept case-sensitive Python regular expressions; add ``(?i)`` for
+case-insensitive matching. Quote patterns in the shell and escape regex
+metacharacters for literal matches. Requests must pass every supplied filter,
+including repeated options. Entries without a user agent fail positive
+user agent filters and pass user agent exclusions.
+
+.. code-block:: bash
+
+   web_traffic_report --latest 10 -s unsuccessful --ip '128.32.*.*'
+   web_traffic_report --ip 128.32
+   web_traffic_report --url 'api/v[0-9]+' --not_url 'health|metrics'
+   web_traffic_report --user_agent 'Mozilla' --not_user_agent '(?i)bot'
+   web_traffic_report --start_time 2026-11-10T12:00:00Z --end_time 2026-11-10T13:00:00Z
 
 .. argparse::
    :module: thmsoc.cli.web_traffic_report

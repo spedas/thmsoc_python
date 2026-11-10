@@ -1,6 +1,7 @@
 """Command-line interface for the web traffic report."""
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -10,6 +11,7 @@ import time
 from thmsoc.web_traffic_report import RegexFilters, write_report
 
 DEFAULT_LOG = Path("/var/log/httpd/ssl_access_log")
+SAVE_FIELDS = ("matches", "ips", "user_agents", "urls", "referer")
 
 
 def positive_minutes(value: str) -> int:
@@ -52,7 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--ip", action="append", default=[], metavar="PATTERN",
         help="source IP substring or quoted shell glob; repeat to require every pattern",
     )
-    for field, label in (("url", "request URL"), ("user_agent", "user agent")):
+    for field, label in (
+        ("url", "request URL"), ("user_agent", "user agent"), ("referer", "referer"),
+    ):
         parser.add_argument(
             f"--{field}", action="append", type=regex_pattern, metavar="REGEX",
             help=f"require a regex match anywhere in the {label}; repeatable",
@@ -73,7 +77,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--end_time", type=iso_timestamp, metavar="TIME",
         help="exclusive ISO 8601 end time; local time if no offset is given",
     )
+    for field in SAVE_FIELDS:
+        label = "referer strings" if field == "referer" else field.replace("_", " ")
+        help_text = (
+            "save original matching log lines"
+            if field == "matches"
+            else f"save distinct {label} with counts; preview the top 25"
+        )
+        parser.add_argument(f"--save_{field}", type=Path, metavar="FILE", help=help_text)
     return parser
+
+
+def validate_output_paths(source: Path, destinations: list[Path]) -> None:
+    """Reject aliased paths before opening any output for writing."""
+    paths = [source, *destinations]
+    for index, path in enumerate(paths):
+        for other in paths[:index]:
+            if path.resolve() == other.resolve() or (
+                path.exists() and other.exists() and path.samefile(other)
+            ):
+                raise ValueError(f"input and output files must be distinct: {path} and {other}")
 
 
 def main() -> int:
@@ -99,7 +122,21 @@ def main() -> int:
             parser.error("--start_time must be earlier than --end_time")
         time_range = (args.start_time, args.end_time)
     try:
-        with args.log.open(encoding="utf-8", errors="replace") as lines:
+        paths = {
+            f"save_{field}": path for field in SAVE_FIELDS
+            if (path := getattr(args, f"save_{field}")) is not None
+        }
+        validate_output_paths(args.log, list(paths.values()))
+        with ExitStack() as stack:
+            lines = stack.enter_context(args.log.open(
+                encoding="utf-8", errors="surrogateescape", newline="",
+            ))
+            destinations = {
+                name: stack.enter_context(path.open(
+                    "w", encoding="utf-8", errors="surrogateescape", newline="",
+                ))
+                for name, path in paths.items()
+            }
             write_report(
                 lines, sys.stdout, args.status, time_range=time_range,
                 ip_filters=tuple(args.ip),
@@ -107,8 +144,12 @@ def main() -> int:
                 user_agent_filters=RegexFilters(
                     tuple(args.user_agent or ()), tuple(args.not_user_agent or ()),
                 ),
+                referer_filters=RegexFilters(
+                    tuple(args.referer or ()), tuple(args.not_referer or ()),
+                ),
+                **destinations,
             )
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     return 0

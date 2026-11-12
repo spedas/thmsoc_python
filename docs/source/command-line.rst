@@ -45,6 +45,36 @@ gen_scmode_batches
    :func: build_parser
    :prog: gen_scmode_batches
 
+launch_idl_batches
+------------------
+
+Start one detached IDL process per batch file in a master list. Use the
+``master_list.txt`` produced by ``gen_l2_batches``, ``gen_summary_plot_batches``,
+or ``gen_scmode_batches``, or supply your own list with one batch file path
+per line. Blank lines are ignored.
+
+When you pass a list file, its directory is the working directory for all
+jobs. When you read the list from standard input, either by omitting the
+argument or passing ``-``, the shell's current directory is used. Relative
+batch paths are resolved from that working directory.
+
+Each job writes standard output and standard error to the same log in the
+working directory. For example, ``subdir/first.bm`` writes to
+``first.bm.log``. Logs with the same name are overwritten. The command prints
+the batch filenames and process IDs after launching the jobs and returns
+without waiting for IDL to finish. See :doc:`configuration` for IDL settings.
+
+.. code-block:: bash
+
+   launch_idl_batches ./batches/master_list.txt
+   cd ./batches
+   launch_idl_batches - < master_list.txt
+
+.. argparse::
+   :module: thmsoc.cli.launch_idl_batches
+   :func: build_parser
+   :prog: launch_idl_batches
+
 gmag_retrieve_alternate
 -----------------------
 .. argparse::

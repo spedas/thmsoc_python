@@ -32,6 +32,19 @@ gen_l2_batches
 gen_summary_plot_batches
 ------------------------
 
+By default, the generated IDL batches pass ``/direct_to_dbase`` to
+``thm_over_shell``, which writes plots under ``plot_dir/yyyy/mm/dd/``.
+The default ``plot_dir`` is the ``overplots/`` directory under
+``paths.output_dataroot`` in :doc:`configuration`. For example,
+``output_dataroot = "/disks/themisdata/"`` gives
+``/disks/themisdata/overplots/``. Supply ``--plot_dir`` to choose a
+different directory or to run without a configured output root.
+
+Use ``--flat`` to omit ``/direct_to_dbase`` and write all plots directly
+to ``plot_dir``. Remove ``--install`` or ``-i`` from existing commands
+that use the dated layout. The ``--output_directory`` argument selects
+where the generated batch files and ``master_list.txt`` are written.
+
 .. argparse::
    :module: thmsoc.cli.gen_summary_plot_batches
    :func: build_parser

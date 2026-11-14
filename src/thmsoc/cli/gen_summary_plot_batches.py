@@ -4,7 +4,7 @@ import argparse
 import sys
 #from thmsoc.dates import parse_date
 #from thmsoc.logging_config import setup_logging
-from thmsoc.gen_summary_plot_batches import DEFAULT_PLOT_DIR, make_plot_batches
+from thmsoc.gen_summary_plot_batches import make_plot_batches
 from thmsoc.arguments import add_trange_arguments, check_trange_arguments
 from thmsoc.arguments import add_summary_plot_arguments, expand_summary_plot_arguments
 from thmsoc.arguments import add_probe_arguments, expand_probe_arguments
@@ -33,15 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     # Specify plot output directory
     p.add_argument(
         "--plot_dir",
-        help="Parent directory where summary plots will be written",
-        default=DEFAULT_PLOT_DIR,
+        help="Parent directory for summary plots (default: overplots/ under paths.output_dataroot)",
     )
 
-    # Install plots directly in the database
     p.add_argument(
-        "-i",
-        "--install",
-        help="Add /direct_to_dbase to thm_over_shell calls",
+        "--flat",
+        help="Write plots directly to plot_dir instead of using yyyy/mm/dd subdirectories",
         action="store_true",
     )
 
@@ -50,7 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     sys.stdout.reconfigure(line_buffering=True)
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
 
     # Check arguments
     check_trange_arguments(args)
@@ -61,18 +59,20 @@ def main() -> int:
     # Expand probes in case 'all' was specified
     probes = expand_probe_arguments(args)
 
-    # Run the report
-    make_plot_batches(
-        start_date=args.start_date,
-        end_date=args.end_date,
-        days=args.days,
-        days_per_batch=args.batch_days,
-        summary_plot_types=summary_plot_types,
-        probes=probes,
-        output_directory=args.output_directory,
-        plot_dir=args.plot_dir,
-        install=args.install,
-    )
+    try:
+        make_plot_batches(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            days=args.days,
+            days_per_batch=args.batch_days,
+            summary_plot_types=summary_plot_types,
+            probes=probes,
+            output_directory=args.output_directory,
+            plot_dir=args.plot_dir,
+            install=not args.flat,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     return 0
 
